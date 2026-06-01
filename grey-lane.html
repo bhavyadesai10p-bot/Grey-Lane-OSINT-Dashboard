@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Grey Lane · Paris OSINT</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:wght@300;400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--surface:#0f1218;--surface2:#151a22;--surface3:#1c2230;
+  --border:#1a2130;--border2:#222d3d;--text:#b8c8d8;--text-dim:#4a5a6a;
+  --text-bright:#ddeeff;--accent:#00d4ff;--accent-dim:#003d4d;
+  --grey:#8899aa;--grey-dark:#334455;
+  --cat-a:#ff4757;--cat-b:#ff6b35;--cat-c:#ffa502;--cat-d:#3742fa;--cat-e:#ff2d78;
+  --sev5:#ff2d78;--sev4:#ff4757;--sev3:#ffa502;--sev2:#3742fa;--sev1:#2ed573;
+  --panel-w:310px;--header-h:50px;
+  --mono:'Share Tech Mono',monospace;--sans:'DM Sans',sans-serif;--display:'Bebas Neue',sans-serif;
+  --radius:3px;--tr:200ms cubic-bezier(.4,0,.2,1);
+  --sheet-peek:72px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;-webkit-tap-highlight-color:transparent}
+
+/* scanlines */
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);pointer-events:none;z-index:9998}
+
+/* ── HEADER ── */
+#header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:14px;z-index:1000}
+#logo{font-family:var(--display);font-size:24px;letter-spacing:3px;color:var(--text-bright);white-space:nowrap;display:flex;align-items:center;gap:8px;flex-shrink:0}
+#logo-grey{color:var(--grey)}
+#logo-lane{color:var(--accent)}
+#logo-sub{font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--text-dim);margin-top:2px}
+#live-dot{width:7px;height:7px;border-radius:50%;background:#2ed573;box-shadow:0 0 8px #2ed573;animation:pdot 2s ease-in-out infinite;flex-shrink:0}
+@keyframes pdot{0%,100%{opacity:1;box-shadow:0 0 8px #2ed573}50%{opacity:.4;box-shadow:0 0 2px #2ed573}}
+#hstats{display:flex;gap:14px;flex:1;overflow:hidden}
+.hstat{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
+.hv{font-family:var(--mono);font-size:16px;color:var(--text-bright);line-height:1}
+.hv.crit{color:var(--cat-e)}
+.hl{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)}
+.hdiv{width:1px;height:22px;background:var(--border2);flex-shrink:0}
+#clock{font-family:var(--mono);font-size:12px;color:var(--accent);white-space:nowrap;margin-left:auto}
+#mbtn{display:none;min-width:44px;min-height:44px;background:none;border:1px solid var(--border2);color:var(--text);cursor:pointer;border-radius:var(--radius);font-size:18px;align-items:center;justify-content:center}
+
+/* ── MAP ── */
+#map{position:fixed;top:var(--header-h);left:var(--panel-w);right:var(--panel-w);bottom:0;z-index:1;transition:left var(--tr),right var(--tr)}
+
+/* ── PANELS ── */
+.panel{position:fixed;top:var(--header-h);bottom:0;width:var(--panel-w);background:var(--surface);overflow-y:auto;z-index:100;display:flex;flex-direction:column}
+.panel::-webkit-scrollbar{width:3px}
+.panel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+#panel-left{left:0;border-right:1px solid var(--border)}
+#panel-right{right:0;border-left:1px solid var(--border)}
+
+.psec{border-bottom:1px solid var(--border);padding:13px 15px}
+.psec:last-child{border-bottom:none}
+.stitle{font-family:var(--mono);font-size:8px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:11px;display:flex;align-items:center;gap:6px}
+.stitle::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── CATEGORY TOGGLES ── */
+.ctog{display:flex;align-items:center;gap:10px;padding:9px 10px;min-height:44px;border-radius:var(--radius);cursor:pointer;transition:background var(--tr);margin-bottom:2px;user-select:none;border:1px solid transparent}
+.ctog:hover{background:var(--surface2)}
+.ctog.active{border-color:var(--border2)}
+.cdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ctog.inactive .cdot{opacity:.2}
+.ctog.inactive .cname{opacity:.35}
+.cname{flex:1;font-size:12px;font-weight:500;color:var(--text)}
+.ccount{font-family:var(--mono);font-size:11px;color:var(--text-dim);min-width:20px;text-align:right}
+
+/* ── SLIDERS ── */
+.srow{display:flex;align-items:center;gap:10px;margin-top:5px}
+.slbl{font-family:var(--mono);font-size:10px;color:var(--text-dim);white-space:nowrap}
+.sval{font-family:var(--mono);font-size:13px;color:var(--accent);min-width:22px;text-align:right}
+input[type=range]{flex:1;-webkit-appearance:none;height:3px;background:var(--border2);border-radius:2px;outline:none;min-height:auto}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 8px var(--accent)}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
+
+/* ── TOGGLES ── */
+.togrow{display:flex;align-items:center;justify-content:space-between;padding:8px 0;min-height:44px}
+.toglbl{font-size:12px;color:var(--text)}
+.togsub{font-size:10px;color:var(--text-dim);margin-top:1px}
+.sw{position:relative;width:38px;height:22px;flex-shrink:0}
+.sw input{opacity:0;width:0;height:0}
+.sw-sl{position:absolute;inset:0;background:var(--border2);border-radius:11px;cursor:pointer;transition:background var(--tr)}
+.sw-sl::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:var(--text-dim);top:3px;left:3px;transition:transform var(--tr),background var(--tr)}
+.sw input:checked+.sw-sl{background:var(--accent-dim)}
+.sw input:checked+.sw-sl::before{transform:translateX(16px);background:var(--accent)}
+
+/* ── HEATMAP BAR ── */
+#heatbar-wrap{margin-top:10px}
+#heatbar{display:flex;height:28px;border-radius:var(--radius);overflow:hidden;gap:1px;margin-bottom:6px}
+.hbar-cell{flex:1;border-radius:1px;cursor:pointer;transition:opacity var(--tr);position:relative}
+.hbar-cell:hover{opacity:.7}
+.hbar-cell.dimmed{opacity:.25}
+#hbar-label{font-family:var(--mono);font-size:9px;color:var(--text-dim);text-align:center}
+#hbar-label span{color:var(--accent)}
+
+/* ── TEMPORAL SLIDER ── */
+.hdisplay{font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:center;margin-top:6px}
+.hdisplay span{color:var(--accent)}
+
+/* ── STRIKE ITEMS ── */
+.strike-item{padding:10px 11px;min-height:44px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:border-color var(--tr),background var(--tr);background:var(--surface2)}
+.strike-item:hover{border-color:var(--cat-a);background:rgba(255,71,87,.05)}
+.stk-title{font-size:12px;font-weight:600;color:var(--text-bright);margin-bottom:3px}
+.stk-meta{font-family:var(--mono);font-size:10px;color:var(--text-dim)}
+.stk-lines{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.lbadge{font-family:var(--mono);font-size:9px;padding:3px 6px;border-radius:3px;background:var(--accent-dim);color:var(--accent)}
+
+/* ── ROUTE SAFETY ── */
+.rte-inputs{display:flex;flex-direction:column;gap:6px}
+.rte-row{display:flex;align-items:center;gap:8px}
+.rdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.rdot.from{background:var(--accent)}
+.rdot.to{background:var(--cat-a)}
+.rte-input{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 10px;height:44px;color:var(--text);font-family:var(--sans);font-size:12px;outline:none;transition:border-color var(--tr)}
+.rte-input:focus{border-color:var(--accent)}
+.rte-input::placeholder{color:var(--text-dim)}
+.btn{width:100%;padding:12px;min-height:44px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:var(--radius);color:var(--accent);font-family:var(--mono);font-size:11px;letter-spacing:1px;cursor:pointer;margin-top:7px;transition:background var(--tr);text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{background:rgba(0,212,255,.2)}
+.btn.danger{background:rgba(255,71,87,.1);border-color:var(--cat-a);color:var(--cat-a)}
+.btn.danger:hover{background:rgba(255,71,87,.2)}
+.rte-result{margin-top:10px;padding:10px 11px;border-radius:var(--radius);font-size:12px;line-height:1.5;display:none}
+.rte-result.safe{background:rgba(46,213,115,.08);border:1px solid #2ed573;color:#2ed573}
+.rte-result.warning{background:rgba(255,165,2,.08);border:1px solid var(--cat-c);color:var(--cat-c)}
+.rte-result.danger{background:rgba(255,71,87,.08);border:1px solid var(--cat-a);color:var(--cat-a)}
+.alt-routes{margin-top:8px}
+.alt-route-btn{display:block;width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--mono);font-size:10px;color:var(--accent);cursor:pointer;transition:border-color var(--tr)}
+.alt-route-btn:hover{border-color:var(--accent)}
+
+/* ── AI PARSER ── */
+.ai-textarea{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px;color:var(--text);font-family:var(--mono);font-size:11px;resize:vertical;min-height:80px;outline:none;transition:border-color var(--tr);line-height:1.5}
+.ai-textarea:focus{border-color:var(--accent)}
+.ai-textarea::placeholder{color:var(--text-dim)}
+.ai-result{margin-top:8px;padding:10px;border-radius:var(--radius);background:var(--surface2);border:1px solid var(--border2);font-family:var(--mono);font-size:10px;color:var(--text);display:none;line-height:1.7}
+.fk{color:var(--text-dim)}.fv{color:var(--text-bright)}.fv.s5{color:var(--sev5)}.fv.s4{color:var(--sev4)}.fv.s3{color:var(--sev3)}.fv.fc{color:var(--cat-a)}
+.pi{display:none;align-items:center;gap:8px;padding:8px 0;font-family:var(--mono);font-size:11px;color:var(--accent)}
+.pd span{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);animation:db 1.4s infinite ease-in-out both}
+.pd span:nth-child(1){animation-delay:-.32s}.pd span:nth-child(2){animation-delay:-.16s}
+@keyframes db{0%,80%,100%{transform:scale(0);opacity:.3}40%{transform:scale(1);opacity:1}}
+.apirow{display:flex;gap:6px;margin-bottom:8px}
+.api-inp{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:8px;height:36px;color:var(--text);font-family:var(--mono);font-size:10px;outline:none}
+.api-inp:focus{border-color:var(--accent)}
+.api-inp::placeholder{color:var(--text-dim)}
+
+/* ── LIVE FEED ── */
+.fctrl{display:flex;gap:5px;margin-bottom:10px}
+.fsort{flex:1;padding:10px 5px;min-height:44px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text-dim);font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all var(--tr)}
+.fsort.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+
+.icard{padding:10px 12px 10px 15px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all var(--tr);background:var(--surface2);position:relative;overflow:hidden;min-height:44px}
+.icard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.icard.cat-A::before{background:var(--cat-a)}.icard.cat-B::before{background:var(--cat-b)}
+.icard.cat-C::before{background:var(--cat-c)}.icard.cat-D::before{background:var(--cat-d)}.icard.cat-E::before{background:var(--cat-e)}
+.icard:hover{border-color:var(--border2);transform:translateX(2px)}
+.icard:active{transform:translateX(0) scale(.99)}
+.ihdr{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px}
+.isev{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 6px;border-radius:3px;flex-shrink:0;margin-top:1px}
+.s1{background:rgba(46,213,115,.15);color:#2ed573}.s2{background:rgba(55,66,250,.15);color:#3742fa}
+.s3{background:rgba(255,165,2,.15);color:#ffa502}.s4{background:rgba(255,71,87,.15);color:#ff4757}
+.s5{background:rgba(255,45,120,.2);color:#ff2d78;animation:s5p 2s infinite}
+@keyframes s5p{0%,100%{box-shadow:0 0 0 rgba(255,45,120,0)}50%{box-shadow:0 0 10px rgba(255,45,120,.4)}}
+.itype{font-size:12px;font-weight:600;color:var(--text-bright);flex:1;line-height:1.3}
+.idesc{font-size:11px;color:var(--text-dim);line-height:1.4;margin-bottom:6px}
+.iftr{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.isrc{font-family:var(--mono);font-size:9px;padding:2px 5px;border-radius:3px}
+.src-official{background:rgba(46,213,115,.15);color:#2ed573}.src-news{background:rgba(0,212,255,.12);color:var(--accent)}
+.src-social{background:rgba(255,165,2,.12);color:#ffa502}.src-telegram{background:rgba(55,66,250,.15);color:#3742fa}
+.itime{font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-left:auto}
+.vbdg{font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(46,213,115,.1);color:#2ed573;border:1px solid rgba(46,213,115,.3)}
+.uvbdg{font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(255,165,2,.1);color:#ffa502;border:1px solid rgba(255,165,2,.3)}
+.bbdg{font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.3)}
+
+/* media thumb inside popup */
+.popup-media{width:100%;height:100px;object-fit:cover;border-radius:var(--radius);margin-bottom:8px;display:block}
+.popup-media-vid{width:100%;height:120px;border-radius:var(--radius);margin-bottom:8px;border:none;display:block}
+.popup-src-bundle{margin-top:8px;padding:8px;background:rgba(0,212,255,.05);border-radius:var(--radius);border:1px solid var(--border2)}
+.bundle-src-row{font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:3px;display:flex;align-items:center;gap:5px}
+.bundle-src-row:last-child{margin-bottom:0}
+.bundle-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* ── TRANSIT ALERTS ── */
+.titem{padding:9px 11px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:5px;background:var(--surface2)}
+.thdr{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.tlbdg{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:3px;background:var(--cat-d);color:#fff;flex-shrink:0}
+.ttype{font-size:11px;font-weight:600;color:var(--text-bright);flex:1}
+.tsev{font-family:var(--mono);font-size:9px;color:var(--text-dim)}
+.tmsg{font-size:11px;color:var(--text-dim);line-height:1.4}
+
+/* ── LEAFLET OVERRIDES ── */
+.leaflet-container{background:#080a0d}
+.leaflet-control-zoom{border:1px solid var(--border2)!important;border-radius:var(--radius)!important;overflow:hidden}
+.leaflet-control-zoom a{background:var(--surface)!important;color:var(--text)!important;border-bottom:1px solid var(--border)!important;font-size:16px!important;line-height:30px!important;width:30px!important;height:30px!important}
+.leaflet-control-zoom a:hover{background:var(--surface2)!important}
+.leaflet-popup-content-wrapper{background:var(--surface)!important;border:1px solid var(--border2)!important;border-radius:var(--radius)!important;box-shadow:0 6px 30px rgba(0,0,0,.7)!important;color:var(--text)!important}
+.leaflet-popup-tip{background:var(--surface)!important}
+.leaflet-popup-content{margin:0!important;padding:0!important}
+.popup-inner{padding:12px 14px;min-width:230px;max-width:290px}
+.popup-type{font-size:13px;font-weight:600;color:var(--text-bright);margin-bottom:5px}
+.popup-desc{font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:8px}
+.popup-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.popup-link{display:inline-block;font-family:var(--mono);font-size:10px;color:var(--accent);text-decoration:none;margin-top:2px}
+.popup-link:hover{text-decoration:underline}
+
+/* cluster override */
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(0,0,0,.5)!important}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:var(--surface2)!important;color:var(--accent)!important;font-family:var(--mono)!important;font-size:11px!important;border:1px solid var(--border2)!important}
+
+/* ── MAP OVERLAY BTNS ── */
+.mobtn{position:absolute;z-index:500;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text-dim);font-family:var(--mono);font-size:10px;padding:8px 12px;min-height:36px;cursor:pointer;transition:all var(--tr);letter-spacing:1px;text-transform:uppercase}
+.mobtn:hover{color:var(--text);border-color:var(--accent)}
+.mobtn.active{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+#btn-transit{bottom:56px;left:50%;transform:translateX(-50%)}
+#btn-cluster{bottom:14px;left:50%;transform:translateX(-50%)}
+
+/* ── MOBILE BOTTOM SHEET ── */
+@media(max-width:900px){
+  :root{--panel-w:0px}
+  #map{left:0;right:0;bottom:var(--sheet-peek)}
+  #panel-left,#panel-right{display:none}
+  #mbtn{display:flex}
+  #hstats .hstat:nth-child(n+4){display:none}
+
+  /* Bottom sheet */
+  #bottom-sheet{
+    position:fixed;bottom:0;left:0;right:0;
+    height:90vh;
+    background:var(--surface);
+    border-top:1px solid var(--border2);
+    border-radius:16px 16px 0 0;
+    z-index:300;
+    transform:translateY(calc(100% - var(--sheet-peek)));
+    transition:transform .35s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;
+    touch-action:none;
+  }
+  #bottom-sheet.open{transform:translateY(0)}
+  #sheet-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 0;flex-shrink:0;cursor:grab}
+  #sheet-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+  .stab{flex:1;padding:12px 6px;min-height:44px;font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);background:none;border:none;cursor:pointer;transition:color var(--tr);border-bottom:2px solid transparent}
+  .stab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  #sheet-body{flex:1;overflow-y:auto;padding:14px 16px}
+  #sheet-body::-webkit-scrollbar{width:3px}
+  #sheet-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+  /* sheet peek label */
+  #sheet-peek-bar{position:fixed;bottom:0;left:0;right:0;height:var(--sheet-peek);background:var(--surface);border-top:1px solid var(--border2);display:flex;align-items:center;padding:0 16px;gap:12px;z-index:299;pointer-events:none}
+  .peek-stat{display:flex;flex-direction:column;gap:1px}
+  .peek-v{font-family:var(--mono);font-size:15px;color:var(--text-bright);line-height:1}
+  .peek-l{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)}
+
+  .mobtn{display:none}
+  #btn-transit,#btn-cluster{display:none}
+}
+
+/* ── SCROLLBAR GLOBAL ── */
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── NEW FLASH ── */
+@keyframes fnew{0%{background:rgba(0,212,255,.15)}100%{background:var(--surface2)}}
+.icard.new{animation:fnew 2.5s ease-out}
+
+/* ── LOADING ── */
+#loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9000;gap:18px;transition:opacity .5s}
+#loading-overlay.fo{opacity:0;pointer-events:none}
+.ll{font-family:var(--display);font-size:48px;letter-spacing:5px;color:var(--text-bright)}
+.ll .g{color:var(--grey)}.ll .a{color:var(--accent)}
+.lbar{width:220px;height:2px;background:var(--border2);border-radius:1px;overflow:hidden}
+.lfill{height:100%;background:linear-gradient(90deg,var(--grey),var(--accent));animation:lf 1.4s ease-out forwards}
+@keyframes lf{from{width:0}to{width:100%}}
+.ltxt{font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:1.5px}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-overlay">
+  <div class="ll"><span class="g">GREY</span> <span class="a">LANE</span></div>
+  <div style="font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--text-dim);margin-top:-12px">PARIS OSINT · URBAN SAFETY</div>
+  <div class="lbar"><div class="lfill"></div></div>
+  <div class="ltxt" id="ltxt">INITIALISING DATA FEEDS...</div>
+</div>
+
+<!-- HEADER -->
+<div id="header">
+  <div id="live-dot"></div>
+  <div id="logo">
+    <div>
+      <div><span id="logo-grey">GREY</span> <span id="logo-lane">LANE</span></div>
+      <div id="logo-sub">PARIS OSINT</div>
+    </div>
+  </div>
+  <div class="hdiv"></div>
+  <div id="hstats">
+    <div class="hstat"><div class="hv" id="s-active">16</div><div class="hl">Active</div></div>
+    <div class="hstat"><div class="hv crit" id="s-crit">3</div><div class="hl">Critical</div></div>
+    <div class="hstat"><div class="hv" id="s-vfd">9</div><div class="hl">Verified</div></div>
+    <div class="hstat"><div class="hv" id="s-transit">3</div><div class="hl">Transit</div></div>
+    <div class="hstat"><div class="hv" id="s-strikes">2</div><div class="hl">Strikes</div></div>
+  </div>
+  <button id="mbtn" onclick="toggleSheet()">☰</button>
+  <div id="clock">--:--:-- CET</div>
+</div>
+
+<!-- LEFT PANEL (desktop) -->
+<div id="panel-left" class="panel">
+
+  <div class="psec">
+    <div class="stitle">Categories</div>
+    <div class="ctog active" data-cat="A" onclick="toggleCat('A')"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Civil Unrest</div><div class="ccount" id="cA">5</div></div>
+    <div class="ctog active" data-cat="B" onclick="toggleCat('B')"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Property Damage</div><div class="ccount" id="cB">3</div></div>
+    <div class="ctog active" data-cat="C" onclick="toggleCat('C')"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">4</div></div>
+    <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">3</div></div>
+    <div class="ctog active" data-cat="E" onclick="toggleCat('E')"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">1</div></div>
+  </div>
+
+  <div class="psec">
+    <div class="stitle">Filters</div>
+    <div class="srow">
+      <div class="slbl">MIN SEV</div>
+      <input type="range" id="sev-sl" min="1" max="5" value="1" oninput="onSev(this.value)">
+      <div class="sval" id="sev-v">1</div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="togrow">
+        <div><div class="toglbl">Verified only</div><div class="togsub">Hide unconfirmed</div></div>
+        <label class="sw"><input type="checkbox" id="tog-vfd" onchange="applyFilters()"><span class="sw-sl"></span></label>
+      </div>
+      <div class="togrow">
+        <div><div class="toglbl">Transit overlay</div><div class="togsub">Métro + RER lines</div></div>
+        <label class="sw"><input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)"><span class="sw-sl"></span></label>
+      </div>
+      <div class="togrow">
+        <div><div class="toglbl">Strike zones</div><div class="togsub">Polygon overlays</div></div>
+        <label class="sw"><input type="checkbox" id="tog-strikes" checked onchange="toggleStrikes(this.checked)"><span class="sw-sl"></span></label>
+      </div>
+      <div class="togrow">
+        <div><div class="toglbl">Cluster markers</div><div class="togsub">Group nearby pins</div></div>
+        <label class="sw"><input type="checkbox" id="tog-cluster" checked onchange="toggleClusterMode(this.checked)"><span class="sw-sl"></span></label>
+      </div>
+    </div>
+
+    <!-- Temporal heatmap slider -->
+    <div style="margin-top:14px">
+      <div class="slbl" style="margin-bottom:8px">TEMPORAL DENSITY</div>
+      <div id="heatbar-wrap">
+        <div id="heatbar"></div>
+        <div id="hbar-label">All 24h · <span id="hbar-active">All incidents</span></div>
+      </div>
+      <div class="srow" style="margin-top:10px">
+        <div class="slbl">WINDOW</div>
+        <input type="range" id="hour-sl" min="1" max="168" value="168" oninput="onHour(this.value)">
+        <div class="sval" id="hour-v">All</div>
+      </div>
+      <div class="hdisplay">Showing <span id="hour-count">16</span> incidents</div>
+    </div>
+  </div>
+
+  <div class="psec">
+    <div class="stitle">Strike Calendar</div>
+    <div class="strike-item" onclick="flyToStrike(0)">
+      <div class="stk-title">CGT Transport — Grève Générale</div>
+      <div class="stk-meta">Today 06:00 → 22:00 · CGT Transport</div>
+      <div class="stk-lines"><span class="lbadge">M1</span><span class="lbadge">M4</span><span class="lbadge">M13</span><span class="lbadge">RER B</span><span class="lbadge">RER D</span></div>
+    </div>
+    <div class="strike-item" onclick="flyToStrike(1)">
+      <div class="stk-title">SUD Rail — Manifestation Nationale</div>
+      <div class="stk-meta">Tomorrow 08:00 → 20:00 · SUD Rail</div>
+      <div class="stk-lines"><span class="lbadge">RER A</span><span class="lbadge">RER C</span><span class="lbadge">M9</span></div>
+    </div>
+  </div>
+
+  <div class="psec">
+    <div class="stitle">Route Safety</div>
+    <div class="rte-inputs">
+      <div class="rte-row"><div class="rdot from"></div><input type="text" class="rte-input" id="rte-from" placeholder="From: click map or type"></div>
+      <div class="rte-row"><div class="rdot to"></div><input type="text" class="rte-input" id="rte-to" placeholder="To: click map or type"></div>
+    </div>
+    <button class="btn" onclick="checkRoute()">▶ CHECK ROUTE</button>
+    <div class="rte-result" id="rte-result"></div>
+    <div class="alt-routes" id="alt-routes"></div>
+  </div>
+
+  <div class="psec">
+    <div class="stitle">AI Incident Parser</div>
+    <div class="apirow">
+      <input type="password" class="api-inp" id="api-key" placeholder="sk-ant-... (optional, enables live AI)">
+    </div>
+    <textarea class="ai-textarea" id="ai-inp" placeholder='Paste raw social / Telegram / news text&#10;&#10;e.g. "manif bd saint-germain CRS gaz lacrymogène"'></textarea>
+    <button class="btn" onclick="parseAI()">⚡ PARSE WITH CLAUDE</button>
+    <div class="pi" id="pi"><div class="pd"><span></span><span></span><span></span></div>ANALYSING...</div>
+    <div class="ai-result" id="ai-res"></div>
+    <button class="btn danger" id="ai-add" style="display:none;margin-top:6px" onclick="addParsed()">＋ ADD TO MAP</button>
+  </div>
+
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+<button class="mobtn" id="btn-transit" onclick="toggleTransitBtn()">TRANSIT LINES</button>
+<button class="mobtn" id="btn-cluster" onclick="toggleClusterBtn()">CLUSTERING ON</button>
+
+<!-- RIGHT PANEL (desktop) -->
+<div id="panel-right" class="panel">
+  <div class="psec">
+    <div class="stitle">Live Feed</div>
+    <div class="fctrl">
+      <button class="fsort active" id="fs-sev" onclick="sortFeed('severity')">SEVERITY</button>
+      <button class="fsort" id="fs-time" onclick="sortFeed('time')">RECENT</button>
+      <button class="fsort" id="fs-cat" onclick="sortFeed('category')">CATEGORY</button>
+    </div>
+    <div id="feed"></div>
+  </div>
+  <div class="psec">
+    <div class="stitle">Transit Alerts</div>
+    <div id="transit-feed"></div>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM SHEET -->
+<div id="sheet-peek-bar" style="display:none">
+  <div class="peek-stat"><div class="peek-v" id="ps-active">16</div><div class="peek-l">Active</div></div>
+  <div class="peek-stat"><div class="peek-v" style="color:var(--cat-e)" id="ps-crit">3</div><div class="peek-l">Critical</div></div>
+  <div class="peek-stat"><div class="peek-v" id="ps-vfd">9</div><div class="peek-l">Verified</div></div>
+  <div style="margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--text-dim)">▲ SWIPE UP</div>
+</div>
+
+<div id="bottom-sheet" style="display:none">
+  <div id="sheet-handle"></div>
+  <div id="sheet-tabs">
+    <button class="stab active" onclick="sheetTab(0)">FEED</button>
+    <button class="stab" onclick="sheetTab(1)">FILTERS</button>
+    <button class="stab" onclick="sheetTab(2)">TRANSIT</button>
+    <button class="stab" onclick="sheetTab(3)">AI</button>
+  </div>
+  <div id="sheet-body"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════════════════
+function ha(h){return new Date(Date.now()-h*3600000).toISOString()}
+
+const INCIDENTS=[
+  {id:1,lat:48.8534,lng:2.3488,category:'A',type:'Authorized Protest',severity:4,description:'Large march on Bd Saint-Germain. CRS deployed at Place Maubert, tear gas reported. Route blocked between Odéon and Maubert.',source_type:'official',verified:true,bundled:true,occurred_at:ha(1),address:'Bd Saint-Germain, 6e',source_url:'https://www.prefecturedepolice.interieur.gouv.fr',bundle_sources:[{type:'official',label:'Préfecture de Police'},{type:'social',label:'@parismanif_live'}],media_url:'https://picsum.photos/seed/protest/400/200'},
+  {id:2,lat:48.8738,lng:2.3467,category:'A',type:'Spontaneous Protest',severity:3,description:'Wildcat manif near Gare du Nord. ~300 participants, road blocked on Rue de Maubeuge.',source_type:'social',verified:false,bundled:false,occurred_at:ha(2),address:'Gare du Nord, 10e',source_url:'#',media_url:null},
+  {id:3,lat:48.8610,lng:2.3390,category:'B',type:'Arson / Vehicle Fire',severity:4,description:'Two cars set alight near Opéra Garnier. Fire brigade on scene. Smoke visible from Bd Haussmann.',source_type:'news',verified:true,bundled:true,occurred_at:ha(3),address:'Rue de la Paix, 2e',source_url:'#',bundle_sources:[{type:'news',label:'BFMTV Paris'},{type:'official',label:'Brigade Pompiers'}],media_url:'https://picsum.photos/seed/fire/400/200'},
+  {id:4,lat:48.8650,lng:2.3200,category:'B',type:'Vandalism / Graffiti',severity:2,description:'Bank facades tagged on Bd Haussmann. Police report filed, cleanup crews deployed.',source_type:'social',verified:false,bundled:false,occurred_at:ha(5),address:'Bd Haussmann, 9e',source_url:'#',media_url:null},
+  {id:5,lat:48.8584,lng:2.2945,category:'C',type:'Pickpocket Hotspot',severity:2,description:'Multiple theft reports near Champ de Mars and Eiffel Tower esplanade. Tourist advisory in effect.',source_type:'official',verified:true,bundled:false,occurred_at:ha(4),address:'Champ de Mars, 7e',source_url:'#',media_url:null},
+  {id:6,lat:48.8701,lng:2.3310,category:'C',type:'Mugging / Assault',severity:3,description:'Armed robbery on Rue de Rivoli near Louvre. Suspect fled on motorbike, helmet obscured face.',source_type:'news',verified:true,bundled:true,occurred_at:ha(2),address:'Rue de Rivoli, 1e',source_url:'#',bundle_sources:[{type:'news',label:'Le Monde'},{type:'social',label:'@parispolice_scanner'}],media_url:null},
+  {id:7,lat:48.8836,lng:2.3430,category:'C',type:'Scam Operation',severity:1,description:'Petition scam gang active at Sacré-Cœur. Multiple individuals in group, approach tourists.',source_type:'official',verified:true,bundled:false,occurred_at:ha(6),address:'Sacré-Cœur, 18e',source_url:'#',media_url:null},
+  {id:8,lat:48.8567,lng:2.3522,category:'C',type:'Distraction Theft',severity:2,description:'Ring scam and three-card monte active near Notre-Dame reconstruction site.',source_type:'social',verified:false,bundled:false,occurred_at:ha(3),address:'Île de la Cité, 4e',source_url:'#',media_url:null},
+  {id:9,lat:48.8820,lng:2.3380,category:'D',type:'Métro 13 Suspension',severity:3,description:'Line 13 fully suspended Saint-Lazare ↔ Châtillon due to CGT strike action. Replacement buses every 10min.',source_type:'official',verified:true,bundled:false,occurred_at:ha(1),address:'Métro Ligne 13',source_url:'#',media_url:null},
+  {id:10,lat:48.8797,lng:2.3550,category:'D',type:'RER B Delays',severity:2,description:'RER B: 20–30min delays all services north and south. SNCF agents strike action in progress.',source_type:'official',verified:true,bundled:false,occurred_at:ha(2),address:'RER B',source_url:'#',media_url:null},
+  {id:11,lat:48.8600,lng:2.3500,category:'D',type:'Road Closure',severity:2,description:'Bd Saint-Michel closed to all traffic for authorised march. Diversions via Bd Port-Royal.',source_type:'news',verified:true,bundled:false,occurred_at:ha(3),address:'Bd Saint-Michel, 6e',source_url:'#',media_url:null},
+  {id:12,lat:48.8729,lng:2.3021,category:'E',type:'RAID Security Op',severity:5,description:'RAID counter-terrorism operation active near Porte de Clichy. Full exclusion zone 300m radius. AVOID IMMEDIATELY.',source_type:'official',verified:true,bundled:true,occurred_at:ha(.5),address:'Porte de Clichy, 17e',source_url:'#',bundle_sources:[{type:'official',label:'Préfecture de Police'},{type:'telegram',label:'@parisosint_channel'}],media_url:null},
+  {id:13,lat:48.8490,lng:2.3560,category:'A',type:'CRS Deployment',severity:3,description:'Heavy CRS presence at Place d\'Italie. Pre-emptive positioning for scheduled evening protest.',source_type:'news',verified:true,bundled:false,occurred_at:ha(4),address:"Place d'Italie, 13e",source_url:'#',media_url:null},
+  {id:14,lat:48.8751,lng:2.3762,category:'A',type:'Clashes / Barricades',severity:4,description:'Barricades erected at République. Active clashes between protesters and police. Multiple injuries reported.',source_type:'telegram',verified:false,bundled:true,occurred_at:ha(1.5),address:'Place de la République, 11e',source_url:'#',bundle_sources:[{type:'telegram',label:'@euro_unrest'},{type:'social',label:'@republ_live'}],media_url:'https://picsum.photos/seed/riot/400/200'},
+  {id:15,lat:48.8800,lng:2.3600,category:'B',type:'Looting / Store Breach',severity:4,description:'Pharmacy looted on Bd de Belleville. Three arrests made. CCTV footage recovered.',source_type:'social',verified:false,bundled:false,occurred_at:ha(2.5),address:'Bd de Belleville, 20e',source_url:'#',media_url:null},
+  {id:16,lat:48.8620,lng:2.3120,category:'A',type:'Union Assembly Point',severity:2,description:'CGT gathering at Trocadéro for pre-march assembly. Estimated 2,000 attendees. Orderly.',source_type:'official',verified:true,bundled:false,occurred_at:ha(7),address:'Trocadéro, 16e',source_url:'#',media_url:null},
+];
+
+const TRANSIT=[
+  {line:'Métro 13',code:'13',alert_type:'suspension',message:'Service suspendu Saint-Lazare ↔ Châtillon-Montrouge. Navettes bus mises en place.',severity:3},
+  {line:'RER B',code:'B',alert_type:'delay',message:'Retards 15–25 minutes sur toute la ligne. Action syndicale SNCF.',severity:2},
+  {line:'Métro 4',code:'4',alert_type:'delay',message:'Intervalles allongés Montrouge ↔ Clignancourt. Service perturbé.',severity:2},
+];
+
+const STRIKES=[
+  {id:0,lat:48.8534,lng:2.3488,polygon:[[48.857,2.340],[48.857,2.362],[48.848,2.362],[48.848,2.340]],title:'CGT Transport — Grève Générale',color:'#ff4757'},
+  {id:1,lat:48.860,lng:2.330,polygon:[[48.863,2.321],[48.863,2.341],[48.856,2.341],[48.856,2.321]],title:'SUD Rail — Manifestation Nationale',color:'#ff6b35'},
+];
+
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+let map,clusterGroup,transitLayer,strikeLayer,routeLayer;
+let activeCats=new Set(['A','B','C','D','E']);
+let minSev=1,verifiedOnly=false,maxHours=168;
+let sortMode='severity';
+let transitOn=false,strikesOn=true,clusterOn=true;
+let parsedInc=null;
+let routeFrom=null,routeTo=null,routeMode=null;
+let sheetOpen=false,sheetTabIdx=0;
+let isMobile=window.innerWidth<=900;
+let hourFilter=null; // null=all, number=specific hour
+
+const CAT_COLOR={A:'#ff4757',B:'#ff6b35',C:'#ffa502',D:'#3742fa',E:'#ff2d78'};
+const SEV_SZ=[14,16,20,24,30];
+
+function ta(iso){
+  const m=(Date.now()-new Date(iso).getTime())/60000;
+  if(m<60)return`${Math.round(m)}m ago`;
+  if(m<1440)return`${Math.round(m/60)}h ago`;
+  return`${Math.round(m/1440)}d ago`;
+}
+function ha2(h){return new Date(Date.now()-h*3600000).toISOString()}
+
+// ══════════════════════════════════════════════════════════
+// MAP INIT
+// ══════════════════════════════════════════════════════════
+function initMap(){
+  map=L.map('map',{center:[48.8566,2.3522],zoom:13,zoomControl:true,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+  L.control.attribution({position:'bottomright',prefix:''}).addTo(map);
+
+  clusterGroup=L.markerClusterGroup({
+    maxClusterRadius:50,
+    spiderfyOnMaxZoom:true,
+    showCoverageOnHover:false,
+    iconCreateFunction(cluster){
+      const n=cluster.getChildCount();
+      return L.divIcon({
+        html:`<div style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--accent)">${n}</div>`,
+        className:'',iconSize:[34,34],iconAnchor:[17,17]
+      });
+    }
+  }).addTo(map);
+
+  transitLayer=L.layerGroup();
+  strikeLayer=L.layerGroup().addTo(map);
+  routeLayer=L.layerGroup().addTo(map);
+
+  map.on('click',e=>{
+    if(routeMode==='from'){
+      routeFrom=[e.latlng.lat,e.latlng.lng];
+      document.getElementById('rte-from').value=`${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+      routeMode=null; map.getContainer().style.cursor='';
+    } else if(routeMode==='to'){
+      routeTo=[e.latlng.lat,e.latlng.lng];
+      document.getElementById('rte-to').value=`${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+      routeMode=null; map.getContainer().style.cursor='';
+    }
+  });
+
+  renderStrikes();
+  renderIncidents();
+  buildHeatbar();
+}
+
+// ══════════════════════════════════════════════════════════
+// FILTERING
+// ══════════════════════════════════════════════════════════
+function getFiltered(){
+  return INCIDENTS.filter(i=>{
+    if(!activeCats.has(i.category))return false;
+    if(i.severity<minSev)return false;
+    if(verifiedOnly&&!i.verified)return false;
+    const h=(Date.now()-new Date(i.occurred_at).getTime())/3600000;
+    if(h>maxHours)return false;
+    if(hourFilter!==null){
+      const incHour=new Date(i.occurred_at).getHours();
+      if(incHour!==hourFilter)return false;
+    }
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDER MARKERS (with clustering)
+// ══════════════════════════════════════════════════════════
+function renderIncidents(){
+  clusterGroup.clearLayers();
+  const filtered=getFiltered();
+
+  filtered.forEach(inc=>{
+    const color=CAT_COLOR[inc.category];
+    const sz=SEV_SZ[inc.severity-1];
+    const border=inc.bundled?'solid':(inc.verified?'solid':'dashed');
+    const glow=inc.bundled?`box-shadow:0 0 16px ${color}99,0 0 6px ${color}77;`:'';
+    const op=inc.verified?1:0.72;
+
+    const icon=L.divIcon({
+      className:'',
+      html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:2px ${border} ${color};background:${color}1a;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:${sz>18?9:8}px;color:${color};font-weight:700;cursor:pointer;opacity:${op};${glow};transition:transform 150ms" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${inc.severity}</div>`,
+      iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
+    });
+
+    const m=L.marker([inc.lat,inc.lng],{icon}).bindPopup(buildPopup(inc),{maxWidth:300});
+    clusterGroup.addLayer(m);
+  });
+
+  renderFeed(filtered);
+  updateStats(filtered);
+  if(isMobile)updatePeek(filtered);
+}
+
+// ══════════════════════════════════════════════════════════
+// POPUP (with rich media + bundle sources)
+// ══════════════════════════════════════════════════════════
+function buildPopup(inc){
+  const color=CAT_COLOR[inc.category];
+  const catN={A:'Civil Unrest',B:'Property Damage',C:'Street Crime',D:'Transit',E:'High Security'};
+
+  let mediaHTML='';
+  if(inc.media_url){
+    mediaHTML=`<img class="popup-media" src="${inc.media_url}" alt="Incident media" onerror="this.style.display='none'" loading="lazy">`;
+  }
+
+  let bundleHTML='';
+  if(inc.bundled&&inc.bundle_sources&&inc.bundle_sources.length){
+    const srcColors={official:'#2ed573',news:' #00d4ff',social:'#ffa502',telegram:'#3742fa'};
+    bundleHTML=`<div class="popup-src-bundle">
+      <div style="font-family:var(--mono);font-size:8px;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:6px">BUNDLED SOURCES</div>
+      ${inc.bundle_sources.map(s=>`<div class="bundle-src-row"><div class="bundle-dot" style="background:${srcColors[s.type]||'#888'}"></div><span style="color:${srcColors[s.type]||'var(--text-dim)'}">${s.type.toUpperCase()}</span><span style="color:var(--text-dim)"> · ${s.label}</span></div>`).join('')}
+    </div>`;
+  }
+
+  const verBadge=inc.verified
+    ?`<span style="font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(46,213,115,.1);color:#2ed573;border:1px solid rgba(46,213,115,.3)">✓ VERIFIED</span>`
+    :`<span style="font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(255,165,2,.1);color:#ffa502;border:1px solid rgba(255,165,2,.3)">UNVERIFIED</span>`;
+
+  const bundleBadge=inc.bundled?`<span style="font-family:var(--mono);font-size:8px;padding:2px 5px;border-radius:2px;background:rgba(0,212,255,.1);color:#00d4ff;border:1px solid rgba(0,212,255,.3)">⬡ BUNDLED</span>`:'';
+
+  return `<div class="popup-inner">
+    ${mediaHTML}
+    <div class="popup-type">${inc.type}</div>
+    <div class="popup-desc">${inc.description}</div>
+    <div class="popup-meta">
+      <span style="font-family:var(--mono);font-size:10px;padding:3px 6px;border-radius:3px;background:${color}1a;color:${color}">SEV ${inc.severity}</span>
+      <span style="font-family:var(--mono);font-size:10px;padding:3px 6px;border-radius:3px;background:${color}1a;color:${color}">${catN[inc.category]}</span>
+      ${verBadge}${bundleBadge}
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);line-height:1.6">
+      ${inc.address?`📍 ${inc.address}<br>`:''}
+      🕐 ${ta(inc.occurred_at)} · ${inc.source_type.toUpperCase()}
+    </div>
+    ${bundleHTML}
+    ${inc.source_url&&inc.source_url!=='#'?`<a class="popup-link" href="${inc.source_url}" target="_blank">→ View source</a>`:''}
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// HEATMAP BAR (24h density)
+// ══════════════════════════════════════════════════════════
+function buildHeatbar(){
+  const bar=document.getElementById('heatbar');
+  // count per hour
+  const counts=new Array(24).fill(0);
+  INCIDENTS.forEach(i=>{
+    const h=new Date(i.occurred_at).getHours();
+    counts[h]+=i.severity; // weight by severity
+  });
+  const max=Math.max(...counts,1);
+  bar.innerHTML='';
+  for(let h=0;h<24;h++){
+    const pct=counts[h]/max;
+    const alpha=0.15+pct*0.85;
+    const green=Math.round(pct*200);
+    const red=Math.round(255*(1-pct*0.3));
+    const color=counts[h]===0?'rgba(30,37,48,1)':`rgba(${red},${green},80,${alpha})`;
+    const cell=document.createElement('div');
+    cell.className='hbar-cell';
+    cell.style.background=color;
+    cell.style.position='relative';
+    cell.title=`${h.toString().padStart(2,'0')}:00 — ${counts[h]>0?counts[h]+' severity pts':'quiet'}`;
+    cell.onclick=()=>filterByHour(h,cell);
+    bar.appendChild(cell);
+  }
+}
+
+function filterByHour(h,el){
+  const cells=document.querySelectorAll('.hbar-cell');
+  if(hourFilter===h){
+    hourFilter=null;
+    cells.forEach(c=>c.classList.remove('dimmed'));
+    document.getElementById('hbar-label').innerHTML=`All 24h · <span id="hbar-active">All incidents</span>`;
+  } else {
+    hourFilter=h;
+    cells.forEach((c,i)=>{c.classList.toggle('dimmed',i!==h)});
+    document.getElementById('hbar-label').innerHTML=`${h.toString().padStart(2,'0')}:00 · <span id="hbar-active">Filtered</span>`;
+  }
+  renderIncidents();
+}
+
+// ══════════════════════════════════════════════════════════
+// FEED
+// ══════════════════════════════════════════════════════════
+function renderFeed(filtered){
+  const sorted=[...filtered].sort((a,b)=>{
+    if(sortMode==='severity')return b.severity-a.severity;
+    if(sortMode==='time')return new Date(b.occurred_at)-new Date(a.occurred_at);
+    return a.category.localeCompare(b.category);
+  });
+  const html=sorted.map(i=>{
+    const bb=i.bundled?`<span class="bbdg">⬡ BUNDLED</span>`:'';
+    const media=i.media_url?`<div style="width:100%;height:50px;background:url(${i.media_url}) center/cover;border-radius:var(--radius);margin-bottom:6px;opacity:.7"></div>`:'';
+    return`<div class="icard cat-${i.category}" onclick="flyTo(${i.id})">
+      ${media}
+      <div class="ihdr"><span class="isev s${i.severity}">SEV ${i.severity}</span><div class="itype">${i.type}</div></div>
+      <div class="idesc">${i.description.slice(0,88)}${i.description.length>88?'…':''}</div>
+      <div class="iftr">
+        <span class="isrc src-${i.source_type}">${i.source_type}</span>
+        ${i.verified?'<span class="vbdg">✓ VFD</span>':'<span class="uvbdg">UNVFD</span>'}
+        ${bb}
+        <span class="itime">${ta(i.occurred_at)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('feed').innerHTML=html;
+  if(document.getElementById('sheet-body')&&sheetTabIdx===0)renderSheetFeed(sorted);
+}
+
+// ══════════════════════════════════════════════════════════
+// TRANSIT FEED
+// ══════════════════════════════════════════════════════════
+function renderTransitFeed(){
+  const html=TRANSIT.map(t=>`
+    <div class="titem">
+      <div class="thdr"><span class="tlbdg">${t.code}</span><span class="ttype">${t.alert_type.toUpperCase()}</span><span class="tsev">SEV ${t.severity}</span></div>
+      <div class="tmsg">${t.message}</div>
+    </div>`).join('');
+  document.getElementById('transit-feed').innerHTML=html;
+}
+
+// ══════════════════════════════════════════════════════════
+// STRIKE ZONES
+// ══════════════════════════════════════════════════════════
+function renderStrikes(){
+  strikeLayer.clearLayers();
+  if(!strikesOn)return;
+  STRIKES.forEach(z=>{
+    L.polygon(z.polygon,{color:z.color,fillColor:z.color,fillOpacity:.07,weight:1.5,dashArray:'5,5'})
+      .addTo(strikeLayer)
+      .bindTooltip(`<b style="color:${z.color}">${z.title}</b>`,{sticky:true});
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// TRANSIT LINES OVERLAY
+// ══════════════════════════════════════════════════════════
+const METRO_LINES=[
+  {name:'M1',color:'#F2C931',coords:[[48.872,2.284],[48.869,2.308],[48.863,2.332],[48.857,2.349],[48.848,2.396]]},
+  {name:'M4',color:'#A0006E',coords:[[48.891,2.343],[48.876,2.343],[48.858,2.349],[48.825,2.332]]},
+  {name:'M6',color:'#83C491',coords:[[48.845,2.282],[48.848,2.306],[48.851,2.330],[48.851,2.400]]},
+  {name:'M13',color:'#6EC4E8',coords:[[48.916,2.329],[48.903,2.338],[48.883,2.338],[48.860,2.332],[48.818,2.296]]},
+  {name:'RER A',color:'#D00000',coords:[[48.870,2.209],[48.865,2.287],[48.858,2.350],[48.850,2.440],[48.835,2.520]]},
+  {name:'RER B',color:'#4169E1',coords:[[48.944,2.357],[48.900,2.350],[48.860,2.347],[48.810,2.321],[48.760,2.310]]},
+];
+
+function renderTransitLines(){
+  transitLayer.clearLayers();
+  METRO_LINES.forEach(l=>{
+    L.polyline(l.coords,{color:l.color,weight:3,opacity:.75})
+      .addTo(transitLayer)
+      .bindTooltip(l.name,{sticky:true});
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// TOGGLE FUNCTIONS
+// ══════════════════════════════════════════════════════════
+function toggleCat(cat){
+  const el=document.querySelector(`.ctog[data-cat="${cat}"]`);
+  if(activeCats.has(cat)){activeCats.delete(cat);el.classList.add('inactive')}
+  else{activeCats.add(cat);el.classList.remove('inactive')}
+  renderIncidents();
+}
+function onSev(v){minSev=+v;document.getElementById('sev-v').textContent=v;renderIncidents()}
+function applyFilters(){verifiedOnly=document.getElementById('tog-vfd').checked;renderIncidents()}
+function onHour(v){
+  maxHours=+v;
+  document.getElementById('hour-v').textContent=v>=168?'All':v+'h';
+  renderIncidents();
+}
+function toggleTransit(on){
+  transitOn=on;
+  if(on){renderTransitLines();map.addLayer(transitLayer)}else{map.removeLayer(transitLayer)}
+  document.getElementById('btn-transit').classList.toggle('active',on);
+}
+function toggleTransitBtn(){
+  const c=document.getElementById('tog-transit');
+  c.checked=!c.checked;toggleTransit(c.checked);
+}
+function toggleStrikes(on){strikesOn=on;renderStrikes()}
+function toggleClusterMode(on){
+  clusterOn=on;
+  document.getElementById('btn-cluster').textContent=on?'CLUSTERING ON':'CLUSTERING OFF';
+  if(on){
+    if(!map.hasLayer(clusterGroup))map.addLayer(clusterGroup);
+  } else {
+    // remove cluster, add raw markers
+    map.removeLayer(clusterGroup);
+    renderRawMarkers();
+  }
+}
+function toggleClusterBtn(){
+  const c=document.getElementById('tog-cluster');
+  c.checked=!c.checked;toggleClusterMode(c.checked);
+}
+let rawLayer=null;
+function renderRawMarkers(){
+  if(rawLayer)map.removeLayer(rawLayer);
+  rawLayer=L.layerGroup().addTo(map);
+  getFiltered().forEach(inc=>{
+    const color=CAT_COLOR[inc.category];const sz=SEV_SZ[inc.severity-1];
+    const icon=L.divIcon({className:'',html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;border:2px ${inc.verified?'solid':'dashed'} ${color};background:${color}1a;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:9px;color:${color};font-weight:700">${inc.severity}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+    L.marker([inc.lat,inc.lng],{icon}).bindPopup(buildPopup(inc),{maxWidth:300}).addTo(rawLayer);
+  });
+}
+
+function flyTo(id){
+  const i=INCIDENTS.find(x=>x.id===id);
+  if(!i)return;
+  map.flyTo([i.lat,i.lng],16,{duration:1.1,easeLinearity:.25});
+  if(isMobile)closeSheet();
+}
+function flyToStrike(id){map.flyTo([STRIKES[id].lat,STRIKES[id].lng],15,{duration:1})}
+
+function sortFeed(m){
+  sortMode=m;
+  ['sev','time','cat'].forEach(k=>document.getElementById('fs-'+k)?.classList.remove('active'));
+  const map2={severity:'sev',time:'time',category:'cat'};
+  document.getElementById('fs-'+map2[m])?.classList.add('active');
+  renderIncidents();
+}
+
+// ══════════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════════
+function updateStats(f){
+  document.getElementById('s-active').textContent=f.length;
+  document.getElementById('s-crit').textContent=f.filter(i=>i.severity>=4).length;
+  document.getElementById('s-vfd').textContent=f.filter(i=>i.verified).length;
+  document.getElementById('hour-count').textContent=f.length;
+  ['A','B','C','D','E'].forEach(c=>document.getElementById('c'+c).textContent=f.filter(i=>i.category===c).length);
+}
+function updatePeek(f){
+  document.getElementById('ps-active').textContent=f.length;
+  document.getElementById('ps-crit').textContent=f.filter(i=>i.severity>=4).length;
+  document.getElementById('ps-vfd').textContent=f.filter(i=>i.verified).length;
+}
+
+// ══════════════════════════════════════════════════════════
+// ROUTE SAFETY (with alt route suggestions)
+// ══════════════════════════════════════════════════════════
+function checkRoute(){
+  const fr=document.getElementById('rte-from').value.trim();
+  const to=document.getElementById('rte-to').value.trim();
+  if(!fr||!to){alert('Enter both From and To locations.');return}
+
+  routeLayer.clearLayers();
+  const hazards=INCIDENTS.filter(i=>i.severity>=3&&activeCats.has(i.category));
+  const res=document.getElementById('rte-result');
+  const alt=document.getElementById('alt-routes');
+  res.style.display='block';
+
+  // Parse coords or use stored click coords
+  let fromPt=routeFrom||[48.8566,2.3322];
+  let toPt=routeTo||[48.8566,2.3722];
+
+  // Draw route line
+  const routeLine=L.polyline([fromPt,toPt],{color:'#00d4ff',weight:3,opacity:.7,dashArray:'8,4'}).addTo(routeLayer);
+  L.circleMarker(fromPt,{radius:7,color:'#00d4ff',fillColor:'#00d4ff',fillOpacity:.8,weight:2}).addTo(routeLayer);
+  L.circleMarker(toPt,{radius:7,color:'#ff4757',fillColor:'#ff4757',fillOpacity:.8,weight:2}).addTo(routeLayer);
+  map.fitBounds(routeLine.getBounds(),{padding:[60,60],maxZoom:15});
+
+  // Check hazards near route bbox
+  const bounds=routeLine.getBounds().pad(.02);
+  const nearby=hazards.filter(h=>bounds.contains([h.lat,h.lng]));
+
+  alt.innerHTML='';
+  if(nearby.length===0){
+    res.className='rte-result safe';
+    res.textContent='✓ Route clear — no Sev 3+ incidents on this path.';
+  } else {
+    const max=Math.max(...nearby.map(h=>h.severity));
+    const cls=max>=4?'danger':'warning';
+    res.className=`rte-result ${cls}`;
+    res.innerHTML=`${cls==='danger'?'⛔':'⚠'} ${nearby.length} hazard${nearby.length>1?'s':''} on route:<br>`+
+      nearby.slice(0,3).map(h=>`· SEV${h.severity} ${h.type} — ${h.address||'Paris'}`).join('<br>');
+
+    // Show alt route suggestions
+    alt.innerHTML=`<div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;color:var(--text-dim);margin:10px 0 6px">ALTERNATE ROUTES</div>`+
+      ['Via Bd Périphérique (north bypass)','Via Rue de la Roquette (south bypass)','Metro Line 4 recommended'].map((r,i)=>
+        `<button class="alt-route-btn" onclick="selectAltRoute(${i},'${r}')">→ ${r}</button>`
+      ).join('');
+  }
+}
+
+function selectAltRoute(i,label){
+  // Draw a slightly offset alternate route
+  routeLayer.clearLayers();
+  const offsets=[[.005,-.003],[-.004,.006],[.002,.009]];
+  const fromPt=routeFrom||[48.8566,2.3322];
+  const toPt=routeTo||[48.8566,2.3722];
+  const mid=[(fromPt[0]+toPt[0])/2+offsets[i][0],(fromPt[1]+toPt[1])/2+offsets[i][1]];
+  L.polyline([fromPt,mid,toPt],{color:'#2ed573',weight:3,opacity:.8,dashArray:'6,3'}).addTo(routeLayer);
+  L.circleMarker(fromPt,{radius:7,color:'#00d4ff',fillColor:'#00d4ff',fillOpacity:.8,weight:2}).addTo(routeLayer);
+  L.circleMarker(toPt,{radius:7,color:'#ff4757',fillColor:'#ff4757',fillOpacity:.8,weight:2}).addTo(routeLayer);
+  const res=document.getElementById('rte-result');
+  res.className='rte-result safe';
+  res.innerHTML=`✓ Alt route selected: <b>${label}</b><br>Path avoids all active hazards.`;
+  document.getElementById('alt-routes').innerHTML='';
+}
+
+// ══════════════════════════════════════════════════════════
+// AI PARSER
+// ══════════════════════════════════════════════════════════
+async function parseAI(){
+  const raw=document.getElementById('ai-inp').value.trim();
+  if(!raw)return;
+  const key=document.getElementById('api-key').value.trim();
+  const pi=document.getElementById('pi'),res=document.getElementById('ai-res'),add=document.getElementById('ai-add');
+  pi.style.display='flex';res.style.display='none';add.style.display='none';parsedInc=null;
+
+  if(key){
+    try{
+      const r=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',max_tokens:512,
+          system:`OSINT analyst for Paris. Extract incident data from raw text. Category: A=Civil Unrest, B=Property Damage, C=Street Crime, D=Transit, E=High Security. Severity 1-5. Return ONLY valid JSON: {"category","incident_type","severity","location_text","lat","lng","description","source_type","verified":false}. No markdown.`,
+          messages:[{role:'user',content:raw}]
+        })
+      });
+      const d=await r.json();
+      parsedInc=JSON.parse((d.content?.[0]?.text||'').replace(/```json|```/g,'').trim());
+    }catch(e){pi.style.display='none';res.style.display='block';res.innerHTML=`<span style="color:var(--cat-a)">Error: ${e.message}</span>`;return}
+  } else {
+    await new Promise(r=>setTimeout(r,1600));
+    parsedInc=mockParse(raw);
+  }
+
+  pi.style.display='none';
+  const catN={A:'Civil Unrest',B:'Property Damage',C:'Street Crime',D:'Transit',E:'High Security'};
+  const sc=`sev${parsedInc.severity}`;
+  res.style.display='block';
+  res.innerHTML=[
+    ['category',`<span class="fv fc">${parsedInc.category} — ${catN[parsedInc.category]}</span>`],
+    ['type',`<span class="fv">${parsedInc.incident_type}</span>`],
+    ['severity',`<span class="fv ${parsedInc.severity>=4?sc:''}">${parsedInc.severity}/5</span>`],
+    ['location',`<span class="fv">${parsedInc.location_text||'?'}</span>`],
+    ['coords',`<span class="fv">${parsedInc.lat?.toFixed(4)}, ${parsedInc.lng?.toFixed(4)}</span>`],
+    ['source',`<span class="fv">${parsedInc.source_type}</span>`],
+    ['desc',`<span class="fv">${parsedInc.description}</span>`],
+  ].map(([k,v])=>`<div><span class="fk">${k.padEnd(10,' ')} </span>${v}</div>`).join('');
+  add.style.display='block';
+  if(parsedInc.lat&&parsedInc.lng)map.flyTo([parsedInc.lat,parsedInc.lng],15,{duration:1});
+}
+
+function mockParse(t){
+  const l=t.toLowerCase();
+  let cat='C',sev=2,type='Incident',loc='Paris Centre';
+  let lat=48.8566+(Math.random()-.5)*.05,lng=2.3522+(Math.random()-.5)*.08;
+  if(/manif|protest|crs|émeute|barricade/.test(l)){cat='A';sev=4;type='Protest/Unrest'}
+  else if(/incendie|arson|feu|brûl/.test(l)){cat='B';sev=4;type='Fire/Arson'}
+  else if(/vol|pickpocket|agression|mugging/.test(l)){cat='C';sev=3;type='Street Crime'}
+  else if(/metro|rer|train|grève|suspendu/.test(l)){cat='D';sev=3;type='Transit Disruption'}
+  else if(/bombe|evacu|raid|terroriste/.test(l)){cat='E';sev=5;type='Security Alert'}
+  if(/saint-germain/.test(l)){lat=48.8534;lng=2.3488;loc='Bd Saint-Germain'}
+  else if(/républi/.test(l)){lat=48.8675;lng=2.3626;loc='Place de la République'}
+  else if(/châtelet/.test(l)){lat=48.8587;lng=2.3469;loc='Châtelet'}
+  else if(/belleville/.test(l)){lat=48.8712;lng=2.3769;loc='Belleville'}
+  return{category:cat,incident_type:type,severity:sev,location_text:loc,lat,lng,description:`Parsed: ${t.slice(0,100)}`,source_type:'social',verified:false};
+}
+
+function addParsed(){
+  if(!parsedInc)return;
+  const n=INCIDENTS.length+1;
+  INCIDENTS.unshift({id:n,uuid:'p-'+n,lat:parsedInc.lat,lng:parsedInc.lng,category:parsedInc.category,type:parsedInc.incident_type,severity:parsedInc.severity,description:parsedInc.description,source_type:parsedInc.source_type||'social',verified:false,bundled:false,occurred_at:new Date().toISOString(),address:parsedInc.location_text,source_url:'#',media_url:null});
+  renderIncidents();
+  setTimeout(()=>{const f=document.querySelector('.icard');if(f)f.classList.add('new')},50);
+  document.getElementById('ai-res').style.display='none';
+  document.getElementById('ai-add').style.display='none';
+  parsedInc=null;
+}
+
+// ══════════════════════════════════════════════════════════
+// MOBILE BOTTOM SHEET
+// ══════════════════════════════════════════════════════════
+let sheetY=0,sheetStartY=0,sheetDragging=false;
+
+function initSheet(){
+  const sheet=document.getElementById('bottom-sheet');
+  const handle=document.getElementById('sheet-handle');
+  const peek=document.getElementById('sheet-peek-bar');
+
+  sheet.style.display='flex';
+  peek.style.display='flex';
+
+  handle.addEventListener('pointerdown',e=>{
+    sheetDragging=true;sheetStartY=e.clientY;
+    handle.setPointerCapture(e.pointerId);
+    sheet.style.transition='none';
+  });
+  handle.addEventListener('pointermove',e=>{
+    if(!sheetDragging)return;
+    const dy=e.clientY-sheetStartY;
+    const h=window.innerHeight*.9;
+    const pct=Math.max(0,Math.min(1,dy/h));
+    const curr=sheetOpen?0:h-72;
+    sheet.style.transform=`translateY(${curr+dy}px)`;
+  });
+  handle.addEventListener('pointerup',e=>{
+    if(!sheetDragging)return;
+    sheetDragging=false;
+    sheet.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+    const dy=e.clientY-sheetStartY;
+    if(!sheetOpen&&dy<-60)openSheet();
+    else if(sheetOpen&&dy>60)closeSheet();
+    else sheet.style.transform=sheetOpen?'translateY(0)':`translateY(calc(100% - var(--sheet-peek)))`;
+  });
+
+  // tap peek bar to open
+  peek.style.pointerEvents='auto';
+  peek.onclick=()=>openSheet();
+
+  sheetTab(0);
+}
+
+function openSheet(){sheetOpen=true;document.getElementById('bottom-sheet').classList.add('open')}
+function closeSheet(){sheetOpen=false;document.getElementById('bottom-sheet').classList.remove('open')}
+function toggleSheet(){sheetOpen?closeSheet():openSheet()}
+
+function sheetTab(idx){
+  sheetTabIdx=idx;
+  document.querySelectorAll('.stab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  const body=document.getElementById('sheet-body');
+  if(idx===0)renderSheetFeed(getFiltered().sort((a,b)=>b.severity-a.severity));
+  else if(idx===1)body.innerHTML=sheetFiltersHTML();
+  else if(idx===2)body.innerHTML=sheetTransitHTML();
+  else if(idx===3)body.innerHTML=sheetAIHTML();
+}
+
+function renderSheetFeed(incidents){
+  document.getElementById('sheet-body').innerHTML=incidents.map(i=>`
+    <div class="icard cat-${i.category}" onclick="flyTo(${i.id})" style="margin-bottom:8px">
+      <div class="ihdr"><span class="isev s${i.severity}">SEV ${i.severity}</span><div class="itype">${i.type}</div></div>
+      <div class="idesc">${i.description.slice(0,80)}…</div>
+      <div class="iftr">
+        <span class="isrc src-${i.source_type}">${i.source_type}</span>
+        ${i.verified?'<span class="vbdg">✓ VFD</span>':'<span class="uvbdg">UNVFD</span>'}
+        ${i.bundled?'<span class="bbdg">⬡</span>':''}
+        <span class="itime">${ta(i.occurred_at)}</span>
+      </div>
+    </div>`).join('');
+}
+
+function sheetFiltersHTML(){
+  return`<div style="display:flex;flex-direction:column;gap:8px;padding-bottom:20px">
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--text-dim);margin-bottom:4px">CATEGORIES</div>
+    ${['A','B','C','D','E'].map(c=>{
+      const names={A:'Civil Unrest',B:'Property Damage',C:'Street Crime',D:'Transit',E:'High Security'};
+      const color=`var(--cat-${c.toLowerCase()})`;
+      const on=activeCats.has(c);
+      return`<div style="display:flex;align-items:center;gap:12px;padding:12px 10px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);min-height:48px" onclick="toggleCat('${c}');sheetTab(1)">
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};opacity:${on?1:.25}"></div>
+        <div style="flex:1;font-size:13px;opacity:${on?1:.4}">${names[c]}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:${color}">${document.getElementById('c'+c).textContent}</div>
+      </div>`;
+    }).join('')}
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--text-dim);margin-top:10px;margin-bottom:4px">MIN SEVERITY</div>
+    <div style="display:flex;align-items:center;gap:12px;padding:4px 0">
+      <input type="range" min="1" max="5" value="${minSev}" style="flex:1" oninput="onSev(this.value);sheetTab(1)">
+      <span style="font-family:var(--mono);font-size:14px;color:var(--accent);min-width:20px">${minSev}</span>
+    </div>
+  </div>`;
+}
+
+function sheetTransitHTML(){
+  return`<div style="padding-bottom:20px">
+    ${TRANSIT.map(t=>`<div class="titem" style="margin-bottom:8px">
+      <div class="thdr"><span class="tlbdg">${t.code}</span><span class="ttype">${t.alert_type.toUpperCase()}</span><span class="tsev">SEV ${t.severity}</span></div>
+      <div class="tmsg">${t.message}</div>
+    </div>`).join('')}
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--text-dim);margin:14px 0 8px">STRIKE CALENDAR</div>
+    ${STRIKES.map((s,i)=>`<div class="strike-item" onclick="flyToStrike(${i});closeSheet()">
+      <div class="stk-title">${s.title}</div>
+      <div class="stk-meta">${['Today 06:00→22:00','Tomorrow 08:00→20:00'][i]}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function sheetAIHTML(){
+  return`<div style="padding-bottom:20px">
+    <div style="margin-bottom:8px">
+      <input type="password" class="api-inp" style="width:100%" id="api-key-m" placeholder="sk-ant-... (optional)">
+    </div>
+    <textarea class="ai-textarea" id="ai-inp-m" style="width:100%;min-height:100px" placeholder='Paste raw text from social / Telegram...&#10;&#10;e.g. "manif bd saint-germain CRS"'></textarea>
+    <button class="btn" style="margin-top:8px" onclick="parseAIMobile()">⚡ PARSE WITH CLAUDE</button>
+    <div id="ai-res-m" style="margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--text-dim)"></div>
+  </div>`;
+}
+
+async function parseAIMobile(){
+  const raw=document.getElementById('ai-inp-m').value.trim();
+  if(!raw)return;
+  const res=document.getElementById('ai-res-m');
+  res.textContent='Analysing...';
+  await new Promise(r=>setTimeout(r,1400));
+  const p=mockParse(raw);
+  res.innerHTML=`<span style="color:var(--accent)">${p.category}</span> · SEV ${p.severity} · ${p.incident_type}<br><span style="color:var(--text-dim)">${p.location_text}</span>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════
+function updateClock(){
+  const now=new Date();
+  const t=now.toLocaleTimeString('fr-FR',{timeZone:'Europe/Paris',hour12:false});
+  const d=now.toLocaleDateString('fr-FR',{timeZone:'Europe/Paris',day:'2-digit',month:'short'});
+  document.getElementById('clock').textContent=`${t} CET · ${d}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// LIVE SIMULATION
+// ══════════════════════════════════════════════════════════
+function simLive(){
+  const pool=[
+    {cat:'A',type:'CRS Redeployment',sev:3,desc:'Police unit repositioning near protest zone.'},
+    {cat:'C',type:'Pickpocket Alert',sev:2,desc:'New report near Louvre entrance.'},
+    {cat:'D',type:'Metro Incident',sev:2,desc:'Unattended bag causing delays on Line 4.'},
+    {cat:'B',type:'Graffiti Report',sev:2,desc:'Tagging spotted on Rue Oberkampf.'},
+  ];
+  const p=pool[Math.floor(Math.random()*pool.length)];
+  const n=INCIDENTS.length+1;
+  INCIDENTS.unshift({id:n,uuid:'sim-'+n,lat:48.8566+(Math.random()-.5)*.07,lng:2.3522+(Math.random()-.5)*.12,category:p.cat,type:p.type,severity:p.sev,description:p.desc,source_type:'social',verified:false,bundled:false,occurred_at:new Date().toISOString(),address:'Paris',source_url:'#',media_url:null});
+  renderIncidents();
+  setTimeout(()=>{const f=document.querySelector('.icard');if(f)f.classList.add('new')},50);
+}
+
+// ══════════════════════════════════════════════════════════
+// RESPONSIVE
+// ══════════════════════════════════════════════════════════
+function checkMobile(){
+  isMobile=window.innerWidth<=900;
+  if(isMobile){
+    initSheet();
+    document.getElementById('map').style.bottom='var(--sheet-peek)';
+  } else {
+    document.getElementById('bottom-sheet').style.display='none';
+    document.getElementById('sheet-peek-bar').style.display='none';
+    document.getElementById('map').style.bottom='0';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  const msgs=['LOADING GREY LANE...','CONNECTING DATA FEEDS...','MAPPING INCIDENTS...','SYSTEM READY.'];
+  let i=0;
+  const lt=document.getElementById('ltxt');
+  const iv=setInterval(()=>{
+    if(++i<msgs.length)lt.textContent=msgs[i];
+    else{
+      clearInterval(iv);
+      setTimeout(()=>{
+        const ol=document.getElementById('loading-overlay');
+        ol.classList.add('fo');
+        setTimeout(()=>ol.remove(),500);
+      },400);
+    }
+  },300);
+
+  setTimeout(()=>{
+    initMap();
+    renderTransitFeed();
+    updateClock();
+    setInterval(updateClock,1000);
+    setInterval(simLive,40000);
+    checkMobile();
+    window.addEventListener('resize',()=>{if(map){const c=map.getCenter();setTimeout(()=>{map.invalidateSize();map.setView(c)},100)}checkMobile()});
+    window.addEventListener('orientationchange',()=>{if(!map)return;const c=map.getCenter();setTimeout(()=>{map.invalidateSize();map.setView(c)},300)});
+  },200);
+});
+</script>
+</body>
+</html>
