@@ -908,7 +908,16 @@ async def websocket_live(ws: WebSocket):
 @app.get("/health")
 async def health():
     return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
+from fastapi.responses import HTMLResponse
 
+@app.get("/", response_class=HTMLResponse, summary="Serve the Grey Lane Map Dashboard")
+async def serve_dashboard():
+    """Serves the main interactive OSINT map interface."""
+    try:
+        with open("grey-lane.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h1>Grey Lane Dashboard: grey-lane.html file not found in repository.</h1>"
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
