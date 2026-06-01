@@ -4,7 +4,7 @@ Paris Urban Safety & Transit OSINT Map — FastAPI Backend
 Full production backend with:
   - PostgreSQL schema (via SQLAlchemy ORM)
   - Multi-source ingestion pipeline (RATP API, RSS feeds, Social scraper)
-  - LLM parsing middleware (Anthropic Claude)
+  - LLM parsing middleware (Google Gemini)
   - Geocoding via Nominatim
   - Multi-source incident bundling
   - REST API for frontend
@@ -12,7 +12,7 @@ Full production backend with:
 """
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
-# pip install fastapi uvicorn sqlalchemy asyncpg aiohttp feedparser anthropic python-dotenv
+# pip install fastapi uvicorn sqlalchemy asyncpg aiohttp feedparser google-generativeai python-dotenv
 
 from __future__ import annotations
 import os, asyncio, json, math, hashlib, textwrap
@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 import aiohttp
 import feedparser
-import anthropic
+import google.generativeai as genai
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, Text,
     ForeignKey, create_engine, event
@@ -38,7 +38,7 @@ load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DATABASE_URL   = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/paris_osint")
-ANTHROPIC_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 NOMINATIM_UA   = "ParisOSINTMap/1.0 (contact@example.com)"
 BUNDLING_RADIUS_M = 200   # meters for multi-source bundling
 BUNDLING_WINDOW_S = 3600  # 1 hour window for bundling
@@ -328,20 +328,17 @@ No preamble, no markdown fences.
 """)
 
 async def ai_parse_incident(raw_text: str) -> dict:
-    """
-    Use Claude to extract structured incident data from raw text.
+  """
+    Use Gemini to extract structured incident data from raw text.
     Returns parsed dict or raises ValueError.
     """
-    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_KEY)
-
-    message = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=512,
-        system=PARSE_SYSTEM,
-        messages=[{"role": "user", "content": raw_text}]
-    )
-
-    raw = message.content[0].text.strip()
+    genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = f"{PARSE_SYSTEM}\n\nIncident Text:\n{raw_text}"
+    response = await model.generate_content_async(prompt)
+    
+    raw = response.text.strip()
     cleaned = raw.replace("```json", "").replace("```", "").strip()
     parsed = json.loads(cleaned)
 
@@ -593,7 +590,7 @@ async def ingest_pipeline(db: Session):
             ))
 
     # 2. RSS news
-    if ANTHROPIC_KEY:
+    if GEMINI_KEY:
         rss_items = await fetch_rss_incidents()
         for item in rss_items[:10]:  # limit per cycle
             try:
@@ -622,7 +619,7 @@ async def ingest_pipeline(db: Session):
                 print(f"AI parse error (news): {e}")
 
     # 3. Social media
-    if ANTHROPIC_KEY and SCRAPFLY_KEY:
+    if GEMINI_KEY and SCRAPFLY_KEY:
         social_items = await fetch_social_incidents()
         for item in social_items[:5]:
             try:
@@ -794,11 +791,11 @@ async def transit_lines():
 async def parse_raw_text(body: RawTextParse):
     """
     Submit raw social media / Telegram / news text.
-    Claude extracts: category, location, severity, description, coordinates.
+   Gemini extracts: category, location...
     If auto_add=True, the parsed incident is automatically added to the map.
     """
-    if not ANTHROPIC_KEY:
-        raise HTTPException(503, "Anthropic API key not configured")
+    if not GEMINI_KEY:
+        raise HTTPException(503, "Gemini API key not configured")
 
     try:
         parsed = await ai_parse_incident(body.text)
