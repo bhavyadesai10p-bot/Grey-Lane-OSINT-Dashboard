@@ -328,7 +328,7 @@ No preamble, no markdown fences.
 """)
 
 async def ai_parse_incident(raw_text: str) -> dict:
-  """
+    """
     Use Gemini to extract structured incident data from raw text.
     Returns parsed dict or raises ValueError.
     """
@@ -347,7 +347,7 @@ async def ai_parse_incident(raw_text: str) -> dict:
         coords = await geocode(parsed["location_text"])
         if coords:
             parsed["lat"], parsed["lng"] = coords
-
+            
     return parsed
 
 
