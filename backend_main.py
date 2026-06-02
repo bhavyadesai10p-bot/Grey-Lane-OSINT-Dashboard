@@ -10,7 +10,8 @@ import google.generativeai as genai
 
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# FIXED: Swapped deprecated 1.5-flash model for the current active 2.5-flash model
+ai_model = genai.GenerativeModel('gemini-2.5-flash')
 
 cached_incidents = []
 
@@ -38,7 +39,6 @@ manager = ConnectionManager()
 
 async def fetch_and_parse_news():
     global cached_incidents
-    # FIXED: Swapped to the Main France24 feed which is strictly live and current
     feed_url = "https://www.france24.com/en/rss"
     
     try:
@@ -57,23 +57,21 @@ async def fetch_and_parse_news():
                     Determine severity (low, medium, high) based on the headline's tone.
                     """
                     
-                    # Add a random "Jitter" so fallback pins don't stack perfectly on top of each other
                     lat = 48.8566 + random.uniform(-0.02, 0.02)
                     lng = 2.3522 + random.uniform(-0.02, 0.02)
                     severity = "medium"
                     
                     try:
-                        # FIXED: We use asyncio.to_thread so the AI doesn't freeze the server while thinking
                         response = await asyncio.to_thread(ai_model.generate_content, prompt)
                         raw_text = response.text.strip()
                         if raw_text.startswith("```"):
                             raw_text = raw_text.split("\n", 1)[1]
-                        if raw_text.endswith("```"):
+                        if raw_text.endswith("
+```"):
                             raw_text = raw_text.rsplit("\n", 1)[0]
                             
                         ai_data = json.loads(raw_text.strip())
                         
-                        # We keep a tiny jitter even on AI coordinates so city-wide news fans out
                         lat = float(ai_data.get("lat", lat)) + random.uniform(-0.005, 0.005)
                         lng = float(ai_data.get("lng", lng)) + random.uniform(-0.005, 0.005)
                         severity = ai_data.get("severity", severity)
