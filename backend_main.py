@@ -49,7 +49,7 @@ api_hash = os.environ.get("TELEGRAM_API_HASH", "")
 session_string = os.environ.get("TELEGRAM_SESSION", "")
 
 telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
-TELEGRAM_CHANNELS = ["BFMTV_news", "infotrafic_idf"]
+TELEGRAM_CHANNELS = ["BFMTV_news", "infotrafic_idf", "greylane_test_paris"]
 
 @telegram_client.on(events.NewMessage(chats=TELEGRAM_CHANNELS))
 async def telegram_handler(event):
