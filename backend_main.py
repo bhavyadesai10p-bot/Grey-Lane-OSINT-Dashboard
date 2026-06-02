@@ -38,15 +38,14 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 # --- THE UNIFIED INTEL PIPELINE ---
-# We use standard RSS for news, and RSSHub proxy bridges for Telegram!
 FEED_URLS = [
     # Macro Intel (News)
     "https://www.france24.com/en/rss",         
     "https://www.rfi.fr/en/france/rss",        
     "https://www.thelocal.fr/feed",
-    # Micro Intel (Telegram converted to RSS via public bridge)
-    "https://rsshub.app/telegram/channel/BFMTV_news",
-    "https://rsshub.app/telegram/channel/infotrafic_idf"
+    # Micro Intel (Telegram via a robust community proxy)
+    "https://rsshub.rssforever.com/telegram/channel/BFMTV_news",
+    "https://rsshub.rssforever.com/telegram/channel/infotrafic_idf"
 ]
 
 async def unified_intelligence_scraper():
@@ -54,16 +53,13 @@ async def unified_intelligence_scraper():
     
     for feed_url in FEED_URLS:
         try:
-            # We use a custom User-Agent to ensure the RSS bridge accepts the request
             feed = feedparser.parse(feed_url, agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
             
             if feed.entries:
                 for entry in reversed(feed.entries[:2]): 
-                    # Combine title and description, then strip any hidden HTML tags
                     raw_content = getattr(entry, 'title', '') + " " + getattr(entry, 'description', '')
                     clean_text = re.sub(r'<[^>]+>', ' ', raw_content).strip()
                     
-                    # Prevent duplicates
                     already_exists = any(inc["incident"]["description"].find(clean_text[:20]) != -1 for inc in cached_incidents)
                     
                     if not already_exists and len(clean_text) > 10:
@@ -95,10 +91,20 @@ async def unified_intelligence_scraper():
                         except Exception as ai_error:
                             print(f"AI Parse failed for {feed_url}: {ai_error}")
 
-                        # Dynamically categorize the marker based on where the URL came from
                         is_telegram = "telegram" in feed_url
                         category_name = "TELEGRAM INTEL" if is_telegram else "LIVE AI INTEL"
-                        source_display = feed_url.split('/')[-1] if is_telegram else "News Desk"
+                        
+                        # ---> THE FIX: Restored specific source labels <---
+                        if "france24" in feed_url:
+                            source_display = "France24 Live"
+                        elif "rfi" in feed_url:
+                            source_display = "RFI Local"
+                        elif "thelocal" in feed_url:
+                            source_display = "The Local"
+                        elif is_telegram:
+                            source_display = feed_url.split('/')[-1]
+                        else:
+                            source_display = "News Desk"
 
                         incident = {
                             "event": "new_incident",
@@ -116,8 +122,6 @@ async def unified_intelligence_scraper():
                             cached_incidents.pop(0)
                             
                         await manager.broadcast(incident)
-                        
-                        # Speed limit bumper
                         await asyncio.sleep(4) 
         except Exception as e:
             print(f"Scraper Error for {feed_url}: {e}")
