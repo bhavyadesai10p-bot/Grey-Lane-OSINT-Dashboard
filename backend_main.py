@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # 1. Initialize the Backend
 app = FastAPI(title="Grey Lane OSINT Backend")
 
-# 2. The Bouncer Rule (Fixes the 403 Forbidden error)
+# 2. The Bouncer Rule
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -16,18 +16,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. Root Endpoint (Fixes the "Not Found" screen on Render)
+# 3. Root Endpoint
 @app.get("/")
 def read_root():
     return {"status": "Grey Lane OSINT Backend is Live and Listening!"}
 
-# 4. WebSocket Endpoint (The pipe to your frontend dark map)
+# 4. WebSocket Endpoint (Now with a simulated Intel Payload)
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    
+    # --- THE PAYLOAD TEST ---
+    # Wait 3 seconds so you have time to see it happen on the map
+    await asyncio.sleep(3)
+    
+    # Construct the intelligence packet
+    test_incident = {
+        "event": "new_incident",
+        "incident": {
+            "lat": 48.8606, 
+            "lng": 2.3376, # Coordinates for the Louvre
+            "category": "security alert",
+            "description": "Unplanned political demonstration blocking main thoroughfare. Security perimeter established.",
+            "severity": "high"
+        }
+    }
+    
     try:
+        # Fire the payload down the pipe to the frontend
+        await websocket.send_json(test_incident)
+        
+        # Keep the pipe open
         while True:
-            # Keeps the pipe open and running
             await websocket.receive_text()
+            
     except WebSocketDisconnect:
         print("Frontend map disconnected")
