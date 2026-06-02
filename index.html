@@ -44,7 +44,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <script>
+<script>
         // 1. Initialize the map and center it on Paris [Latitude, Longitude]
         const map = L.map('map').setView([48.8566, 2.3522], 13);
 
@@ -59,6 +59,41 @@
         L.marker([48.8584, 2.2945]).addTo(map)
             .bindPopup("<b>Test Intel:</b> Systems Online.")
             .openPopup();
+
+        // 3. Connect to the Render AI Backend via WebSockets
+        // IMPORTANT: Change this URL to your actual Render URL, and make sure it starts with wss://
+        const backendUrl = const backendUrl = 'wss://grey-lane-osint-dashboard.onrender.com/ws';
+        const ws = new WebSocket(backendUrl);
+
+        ws.onopen = function() {
+            console.log("Connected to Grey Lane Backend");
+            document.getElementById('status-text').innerText = 'Backend: Live & Connected';
+            document.getElementById('status-text').style.color = '#4caf50'; // Green
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.event === 'new_incident') {
+                const inc = data.incident;
+                
+                // Create a red circle marker for new incidents
+                L.circleMarker([inc.lat, inc.lng], {
+                    color: '#d32f2f', // Red alert border
+                    fillColor: '#f44336', // Red fill
+                    fillOpacity: 0.8,
+                    radius: 8
+                }).addTo(map)
+                  .bindPopup(`<b>${inc.category.toUpperCase()}</b><br>${inc.description}<br><small>Severity: ${inc.severity}</small>`)
+                  .openPopup();
+            }
+        };
+
+        ws.onclose = function() {
+            console.log("Disconnected from backend");
+            document.getElementById('status-text').innerText = 'Backend: Disconnected (Retrying...)';
+            document.getElementById('status-text').style.color = '#f44336'; // Red
+        };
     </script>
 </body>
 </html>
