@@ -6,3 +6,4 @@ aiohttp
 feedparser
 google-generativeai
 python-dotenv
+telethon
