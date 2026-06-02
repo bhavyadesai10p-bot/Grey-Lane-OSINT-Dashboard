@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import random
 import feedparser
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -8,9 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 
 # --- AI SETUP ---
-# This securely pulls your secret key from the Render Vault
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-# We use the 'flash' model because it is lightning-fast for live data streams
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 cached_incidents = []
@@ -39,7 +38,7 @@ manager = ConnectionManager()
 
 async def rss_scraper_task():
     global cached_incidents
-    feed_url = "https://www.france24.com/en/france/rss"
+    feed_url = "[https://www.france24.com/en/france/rss](https://www.france24.com/en/france/rss)"
     
     while True:
         try:
@@ -50,28 +49,29 @@ async def rss_scraper_task():
                     
                     if not already_exists:
                         # --- THE AI BRAIN ---
-                        # We ask Gemini to read the headline and figure out the exact coordinates and severity
                         prompt = f"""
                         Read this news headline from France: "{entry.title}"
                         Identify the specific city or landmark mentioned. 
                         If it mentions a specific place (like Louvre, Eiffel Tower, Marseille, Saint-Denis), give the exact latitude and longitude for it.
                         If it's a general France headline, give the coordinates for central Paris (48.8566, 2.3522).
                         Respond ONLY with a valid JSON object in this exact format, with no extra text: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
-                        Determine severity (low, medium, high) based on the headline's tone (e.g. attacks/fires are high, politics is medium, sports/culture is low).
+                        Determine severity (low, medium, high) based on the headline's tone.
                         """
                         
-                        # Fallback default coordinates just in case the AI gets confused
                         lat = 48.8566
                         lng = 2.3522
                         severity = "medium"
                         
                         try:
-                            # Send the headline to Gemini
                             response = ai_model.generate_content(prompt)
-                            # Clean up the text to extract the raw JSON coordinates
-                            result_text = response.text.strip().replace("```json", "").replace("
-```", "")
-                            ai_data = json.loads(result_text)
+                            # Clean up markdown blocks cleanly and safely
+                            raw_text = response.text.strip()
+                            if raw_text.startswith("```"):
+                                raw_text = raw_text.split("\n", 1)[1]
+                            if raw_text.endswith("```"):
+                                raw_text = raw_text.rsplit("\n", 1)[0]
+                                
+                            ai_data = json.loads(raw_text.strip())
                             
                             lat = float(ai_data.get("lat", lat))
                             lng = float(ai_data.get("lng", lng))
