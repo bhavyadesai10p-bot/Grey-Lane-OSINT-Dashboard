@@ -10,8 +10,8 @@ import google.generativeai as genai
 
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-# FIXED: Swapped deprecated 1.5-flash model for the current active 2.5-flash model
-ai_model = genai.GenerativeModel('gemini-2.5-flash')
+# Upgraded to the current active free-tier 3.5 model!
+ai_model = genai.GenerativeModel('gemini-3.5-flash')
 
 cached_incidents = []
 
@@ -50,10 +50,10 @@ async def fetch_and_parse_news():
                 if not already_exists:
                     prompt = f"""
                     Read this news headline: "{entry.title}"
-                    Identify the specific city or landmark mentioned. 
-                    If it mentions a specific place, give the exact latitude and longitude for it.
-                    If it's general news, give the coordinates for central Paris (48.8566, 2.3522).
-                    Respond ONLY with a valid JSON object in this exact format: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
+                    Identify the specific city, country, or landmark mentioned. 
+                    Give the exact latitude and longitude for the location mentioned.
+                    If it is general French news with no location, use central Paris (48.8566, 2.3522).
+                    Respond ONLY with a valid JSON object in this format: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
                     Determine severity (low, medium, high) based on the headline's tone.
                     """
                     
@@ -64,11 +64,10 @@ async def fetch_and_parse_news():
                     try:
                         response = await asyncio.to_thread(ai_model.generate_content, prompt)
                         raw_text = response.text.strip()
-                        if raw_text.startswith("```"):
-                            raw_text = raw_text.split("\n", 1)[1]
-                        if raw_text.endswith("
-```"):
-                            raw_text = raw_text.rsplit("\n", 1)[0]
+                        
+                        # Bulletproof JSON extraction (No backticks required!)
+                        if "{" in raw_text and "}" in raw_text:
+                            raw_text = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
                             
                         ai_data = json.loads(raw_text.strip())
                         
