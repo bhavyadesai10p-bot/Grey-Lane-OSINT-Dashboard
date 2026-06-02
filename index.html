@@ -5,22 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grey Lane | Paris OSINT</title>
     
+    <!-- Leaflet CSS for the map styling -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* This makes sure the map takes up the whole screen */
         body {
             margin: 0;
             padding: 0;
             font-family: 'Arial', sans-serif;
-            background-color: #121212; /* Dark theme background */
+            background-color: #121212;
             color: #ffffff;
         }
         #map {
             width: 100vw;
             height: 100vh;
         }
-        /* A simple overlay for the dashboard title */
         .dashboard-header {
             position: absolute;
             top: 10px;
@@ -29,7 +28,7 @@
             background: rgba(0, 0, 0, 0.7);
             padding: 10px 20px;
             border-radius: 5px;
-            border-left: 4px solid #d32f2f; /* Red accent */
+            border-left: 4px solid #d32f2f;
         }
     </style>
 </head>
@@ -37,50 +36,48 @@
 
     <div class="dashboard-header">
         <h2>Grey Lane | Live Paris OSINT</h2>
-        <p id="status-text" style="color: #4caf50; font-size: 14px; margin-top: -10px;">Backend: Disconnected</p>
+        <!-- This will start Yellow, turn Green on connect, or Red if it fails -->
+        <p id="status-text" style="color: #ff9800; font-size: 14px; margin-top: -10px;">Backend: Waking up Render server...</p>
     </div>
 
     <div id="map"></div>
 
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-<script>
-        // 1. Initialize the map and center it on Paris [Latitude, Longitude]
+    <script>
+        // 1. Initialize Map
         const map = L.map('map').setView([48.8566, 2.3522], 13);
 
-        // 2. Add the completely free OpenStreetMap tile layer
+        // 2. Add Dark Theme
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
             subdomains: 'abcd',
             maxZoom: 20
         }).addTo(map);
 
-        // Just dropping a test pin on the Eiffel Tower so we know it works!
+        // 3. Drop Test Pin
         L.marker([48.8584, 2.2945]).addTo(map)
             .bindPopup("<b>Test Intel:</b> Systems Online.")
             .openPopup();
 
-        // 3. Connect to the Render AI Backend via WebSockets
-        // IMPORTANT: Change this URL to your actual Render URL, and make sure it starts with wss://
-        const backendUrl = const backendUrl = 'wss://grey-lane-osint-dashboard.onrender.com/ws';
+        // 4. Connect WebSocket to Render
+        const backendUrl = 'wss://grey-lane-osint-dashboard.onrender.com/ws';
         const ws = new WebSocket(backendUrl);
 
         ws.onopen = function() {
             console.log("Connected to Grey Lane Backend");
             document.getElementById('status-text').innerText = 'Backend: Live & Connected';
-            document.getElementById('status-text').style.color = '#4caf50'; // Green
+            document.getElementById('status-text').style.color = '#4caf50'; // Turns Green
         };
 
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            
             if (data.event === 'new_incident') {
                 const inc = data.incident;
-                
-                // Create a red circle marker for new incidents
                 L.circleMarker([inc.lat, inc.lng], {
-                    color: '#d32f2f', // Red alert border
-                    fillColor: '#f44336', // Red fill
+                    color: '#d32f2f',
+                    fillColor: '#f44336',
                     fillOpacity: 0.8,
                     radius: 8
                 }).addTo(map)
@@ -91,10 +88,9 @@
 
         ws.onclose = function() {
             console.log("Disconnected from backend");
-            document.getElementById('status-text').innerText = 'Backend: Disconnected (Retrying...)';
-            document.getElementById('status-text').style.color = '#f44336'; // Red
+            document.getElementById('status-text').innerText = 'Backend: Disconnected (Server Asleep)';
+            document.getElementById('status-text').style.color = '#f44336'; // Turns Red
         };
     </script>
 </body>
 </html>
-
