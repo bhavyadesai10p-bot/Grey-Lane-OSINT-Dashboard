@@ -57,16 +57,32 @@ async def scrape_telegram_public():
     for channel in TELEGRAM_CHANNELS:
         url = f"https://t.me/s/{channel}"
         try:
-            # We use a standard browser user-agent so Telegram doesn't block the request
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            # Upgraded to a full, authentic Windows desktop User-Agent to prevent Telegram ghost-blocks
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
             html = await asyncio.to_thread(urllib.request.urlopen, req)
             html_content = html.read().decode('utf-8')
             
-            # Use basic regex to find message text blocks in the static HTML
-            messages = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html_content, re.DOTALL)
+            # Robust HTML splitting instead of strict Regex
+            parts = html_content.split('tgme_widget_message_text')
+            messages = []
             
-            # Grab the 2 most recent messages from the channel
+            for part in parts[1:]:
+                try:
+                    start_idx = part.find('>') + 1
+                    end_idx = part.find('</div>')
+                    if start_idx > 0 and end_idx > start_idx:
+                        messages.append(part[start_idx:end_idx])
+                except:
+                    pass
+            
+            # This will force the logs to tell us if it is actually seeing the messages
+            print(f"[DEBUG] Telegram {channel}: Found {len(messages)} messages on page.")
+            
             if messages:
+                # Grab the 2 most recent messages from the channel
                 for msg in reversed(messages[-2:]):
                     # Clean up the raw HTML tags inside the message
                     clean_msg = re.sub(r'<[^>]+>', ' ', msg).strip()
@@ -122,10 +138,11 @@ async def scrape_telegram_public():
                         
                         # Speed limit bumper for Telegram processing
                         await asyncio.sleep(4) 
+            else:
+                print(f"[DEBUG] Telegram {channel}: Could not extract message text from HTML. Telegram might be blocking the request.")
                         
         except Exception as e:
             print(f"Telegram Scraper Error for {channel}: {e}")
-
 async def fetch_and_parse_news():
     global cached_incidents
     for feed_url in FEED_URLS:
