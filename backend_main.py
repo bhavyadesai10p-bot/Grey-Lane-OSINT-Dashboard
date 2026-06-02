@@ -1,16 +1,20 @@
 import os
 import json
 import asyncio
-import random
 import feedparser
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+import google.generativeai as genai
 
-# Global storage to keep track of the latest incidents so new visitors see them instantly
+# --- AI SETUP ---
+# This securely pulls your secret key from the Render Vault
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+# We use the 'flash' model because it is lightning-fast for live data streams
+ai_model = genai.GenerativeModel('gemini-1.5-flash')
+
 cached_incidents = []
 
-# --- 1. Connection Manager ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -18,8 +22,6 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        
-        # INSTANT SYNC: Send all currently cached headlines to this new user immediately
         for incident in cached_incidents:
             await websocket.send_json(incident)
 
@@ -35,7 +37,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- 2. The Background RSS Scraper ---
 async def rss_scraper_task():
     global cached_incidents
     feed_url = "https://www.france24.com/en/france/rss"
@@ -44,46 +45,64 @@ async def rss_scraper_task():
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                # Process the top 5 latest articles to populate the map initially
-                new_items_found = False
-                
-                for entry in reversed(feed.entries[:5]): # Look at recent 5 entries
-                    # Check if we already have this headline cached
+                for entry in reversed(feed.entries[:5]): 
                     already_exists = any(inc["incident"]["description"].find(entry.title) != -1 for inc in cached_incidents)
                     
                     if not already_exists:
-                        # Generate a coordinate near central Paris
-                        lat = 48.8566 + random.uniform(-0.03, 0.03)
-                        lng = 2.3522 + random.uniform(-0.04, 0.04)
+                        # --- THE AI BRAIN ---
+                        # We ask Gemini to read the headline and figure out the exact coordinates and severity
+                        prompt = f"""
+                        Read this news headline from France: "{entry.title}"
+                        Identify the specific city or landmark mentioned. 
+                        If it mentions a specific place (like Louvre, Eiffel Tower, Marseille, Saint-Denis), give the exact latitude and longitude for it.
+                        If it's a general France headline, give the coordinates for central Paris (48.8566, 2.3522).
+                        Respond ONLY with a valid JSON object in this exact format, with no extra text: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
+                        Determine severity (low, medium, high) based on the headline's tone (e.g. attacks/fires are high, politics is medium, sports/culture is low).
+                        """
+                        
+                        # Fallback default coordinates just in case the AI gets confused
+                        lat = 48.8566
+                        lng = 2.3522
+                        severity = "medium"
+                        
+                        try:
+                            # Send the headline to Gemini
+                            response = ai_model.generate_content(prompt)
+                            # Clean up the text to extract the raw JSON coordinates
+                            result_text = response.text.strip().replace("```json", "").replace("
+```", "")
+                            ai_data = json.loads(result_text)
+                            
+                            lat = float(ai_data.get("lat", lat))
+                            lng = float(ai_data.get("lng", lng))
+                            severity = ai_data.get("severity", severity)
+                        except Exception as ai_error:
+                            print(f"AI Parsing failed, using defaults: {ai_error}")
+                        # ---------------------
 
                         incident = {
                             "event": "new_incident",
                             "incident": {
                                 "lat": lat,
                                 "lng": lng,
-                                "category": "LIVE NEWS (RSS)",
+                                "category": "AI PARSED INTELLIGENCE",
                                 "description": f"<b>{entry.title}</b><br><br>Source: France24",
-                                "severity": "medium"
+                                "severity": severity
                             }
                         }
                         
-                        # Add to our server's memory cache
                         cached_incidents.append(incident)
-                        # Keep cache size capped at 20 items so it doesn't clutter
                         if len(cached_incidents) > 20:
                             cached_incidents.pop(0)
                             
-                        # Broadcast live to anyone looking at the map right now
                         await manager.broadcast(incident)
-                        print(f"Cached & streamed new intel: {entry.title}")
+                        print(f"AI mapped new intel: {entry.title}")
                         
         except Exception as e:
             print(f"Scraper Error: {e}")
         
-        # Check for updates every 30 seconds
         await asyncio.sleep(30)
 
-# --- 3. Initialize App ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(rss_scraper_task())
@@ -101,7 +120,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"status": "Grey Lane OSINT Backend is Live!"}
+    return {"status": "Grey Lane OSINT Backend is Live and Powered by AI!"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
