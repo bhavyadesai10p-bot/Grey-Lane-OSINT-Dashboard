@@ -38,20 +38,18 @@ manager = ConnectionManager()
 
 # --- MULTIPLE DATA PIPES ---
 FEED_URLS = [
-    "https://www.france24.com/en/rss",         # International & Major French News
-    "https://www.rfi.fr/en/france/rss",        # Radio France Internationale (Local)
-    "https://www.thelocal.fr/feed"             # The Local (City news & daily life)
+    "https://www.france24.com/en/rss",         
+    "https://www.rfi.fr/en/france/rss",        
+    "https://www.thelocal.fr/feed"             
 ]
 
 async def fetch_and_parse_news():
     global cached_incidents
     
-    # Loop through every intelligence pipe in our list
     for feed_url in FEED_URLS:
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                # Grab the top 2 from each feed to prevent overloading the AI rate limits
                 for entry in reversed(feed.entries[:2]): 
                     already_exists = any(inc["incident"]["description"].find(entry.title) != -1 for inc in cached_incidents)
                     
@@ -84,7 +82,6 @@ async def fetch_and_parse_news():
                         except Exception as ai_error:
                             print(f"AI Parsing failed for {feed_url}: {ai_error}")
 
-                        # Dynamically label the source so you know which pipe caught the intel
                         source_name = "RFI Local" if "rfi" in feed_url else "The Local" if "thelocal" in feed_url else "France24 Live"
 
                         incident = {
@@ -99,19 +96,23 @@ async def fetch_and_parse_news():
                         }
                         
                         cached_incidents.append(incident)
-                        # Increased memory size to hold the heavier data flow
                         if len(cached_incidents) > 30: 
                             cached_incidents.pop(0)
                             
                         await manager.broadcast(incident)
+                        
+                        # ---> THE FIX: THE SPEED LIMIT BUMPER <---
+                        # This forces the loop to wait 4 seconds before hitting Google's servers again.
+                        await asyncio.sleep(4)
+                        
         except Exception as e:
             print(f"Scraper Error for {feed_url}: {e}")
 
 async def rss_scraper_task():
     await fetch_and_parse_news()
     while True:
-        # Paced the timer to 45 seconds to give the AI time to read 3 different sources without timing out
-        await asyncio.sleep(45) 
+        # Paced the master timer to 60 seconds to reset the AI quota limits cleanly
+        await asyncio.sleep(60) 
         await fetch_and_parse_news()
 
 @asynccontextmanager
