@@ -21,7 +21,6 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        # Instantly send whatever is in memory
         for incident in cached_incidents:
             await websocket.send_json(incident)
 
@@ -37,10 +36,11 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# We broke the scraping logic into its own function so we can force-run it at startup
 async def fetch_and_parse_news():
     global cached_incidents
-    feed_url = "https://www.france24.com/en/france/rss"
+    # FIXED: Swapped to the Main France24 feed which is strictly live and current
+    feed_url = "https://www.france24.com/en/rss"
+    
     try:
         feed = feedparser.parse(feed_url)
         if feed.entries:
@@ -49,20 +49,22 @@ async def fetch_and_parse_news():
                 
                 if not already_exists:
                     prompt = f"""
-                    Read this news headline from France: "{entry.title}"
+                    Read this news headline: "{entry.title}"
                     Identify the specific city or landmark mentioned. 
-                    If it mentions a specific place (like Louvre, Eiffel Tower, Marseille, Saint-Denis), give the exact latitude and longitude for it.
-                    If it's a general France headline, give the coordinates for central Paris (48.8566, 2.3522).
-                    Respond ONLY with a valid JSON object in this exact format, with no extra text: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
+                    If it mentions a specific place, give the exact latitude and longitude for it.
+                    If it's general news, give the coordinates for central Paris (48.8566, 2.3522).
+                    Respond ONLY with a valid JSON object in this exact format: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
                     Determine severity (low, medium, high) based on the headline's tone.
                     """
                     
-                    lat = 48.8566
-                    lng = 2.3522
+                    # Add a random "Jitter" so fallback pins don't stack perfectly on top of each other
+                    lat = 48.8566 + random.uniform(-0.02, 0.02)
+                    lng = 2.3522 + random.uniform(-0.02, 0.02)
                     severity = "medium"
                     
                     try:
-                        response = ai_model.generate_content(prompt)
+                        # FIXED: We use asyncio.to_thread so the AI doesn't freeze the server while thinking
+                        response = await asyncio.to_thread(ai_model.generate_content, prompt)
                         raw_text = response.text.strip()
                         if raw_text.startswith("```"):
                             raw_text = raw_text.split("\n", 1)[1]
@@ -70,8 +72,10 @@ async def fetch_and_parse_news():
                             raw_text = raw_text.rsplit("\n", 1)[0]
                             
                         ai_data = json.loads(raw_text.strip())
-                        lat = float(ai_data.get("lat", lat))
-                        lng = float(ai_data.get("lng", lng))
+                        
+                        # We keep a tiny jitter even on AI coordinates so city-wide news fans out
+                        lat = float(ai_data.get("lat", lat)) + random.uniform(-0.005, 0.005)
+                        lng = float(ai_data.get("lng", lng)) + random.uniform(-0.005, 0.005)
                         severity = ai_data.get("severity", severity)
                     except Exception as ai_error:
                         print(f"AI Parsing failed, using defaults: {ai_error}")
@@ -81,8 +85,8 @@ async def fetch_and_parse_news():
                         "incident": {
                             "lat": lat,
                             "lng": lng,
-                            "category": "AI PARSED INTELLIGENCE",
-                            "description": f"<b>{entry.title}</b><br><br>Source: France24",
+                            "category": "LIVE AI INTEL",
+                            "description": f"<b>{entry.title}</b><br><br>Source: France24 Live",
                             "severity": severity
                         }
                     }
@@ -96,11 +100,8 @@ async def fetch_and_parse_news():
         print(f"Scraper Error: {e}")
 
 async def rss_scraper_task():
-    # FORCE FIRST FETCH: Fill memory immediately on boot before starting the timer loop
     await fetch_and_parse_news()
-    
     while True:
-        # Check for updates every 30 seconds ongoing
         await asyncio.sleep(30)
         await fetch_and_parse_news()
 
