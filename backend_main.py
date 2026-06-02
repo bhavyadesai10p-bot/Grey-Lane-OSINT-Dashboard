@@ -50,6 +50,7 @@ session_string = os.environ.get("TELEGRAM_SESSION", "")
 
 telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
 TELEGRAM_CHANNELS = ["BFMTV_news", "infotrafic_idf", "greylane_test_paris"]
+
 @telegram_client.on(events.NewMessage(chats=TELEGRAM_CHANNELS))
 async def telegram_handler(event):
     global cached_incidents
@@ -82,14 +83,12 @@ async def telegram_handler(event):
             raw_json_text = raw_json_text[raw_json_text.find("{"):raw_json_text.rfind("}")+1]
         ai_data = json.loads(raw_json_text)
         
-        # Drop it if it's completely outside our tactical theater
         if not ai_data.get("is_paris", True):
             return
 
         lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
         lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
         
-        # If it's general news, cluster it slightly offset from center so dots don't stack directly on top of each other
         if not ai_data.get("exact_location_found", True):
             lat += random.uniform(-0.008, 0.008)
             lng += random.uniform(-0.008, 0.008)
@@ -112,7 +111,7 @@ async def telegram_handler(event):
     }
     
     cached_incidents.append(incident)
-    if len(cached_incidents) > 200: cached_incidents.pop(0) # Expanded Memory
+    if len(cached_incidents) > 200: cached_incidents.pop(0) 
     await manager.broadcast(incident)
 
 # --- SYSTEM 2: TRADITIONAL NEWS SCRAPER (POLLING PARIS ONLY) ---
@@ -128,7 +127,6 @@ async def unified_intelligence_scraper():
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                # Up the intake to grab up to 15 items to look for Paris news
                 for entry in reversed(feed.entries[:15]): 
                     raw_content = getattr(entry, 'title', '') + " " + getattr(entry, 'description', '')
                     clean_text = re.sub(r'<[^>]+>', ' ', raw_content).strip()
@@ -151,7 +149,7 @@ async def unified_intelligence_scraper():
                             ai_data = json.loads(raw_json_text)
                             
                             if not ai_data.get("is_paris", False):
-                                continue # Throw away non-Paris global news!
+                                continue 
 
                             lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
                             lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
@@ -176,7 +174,7 @@ async def unified_intelligence_scraper():
                             }
                         }
                         cached_incidents.append(incident)
-                        if len(cached_incidents) > 200: cached_incidents.pop(0) # Expanded Memory
+                        if len(cached_incidents) > 200: cached_incidents.pop(0) 
                         await manager.broadcast(incident)
                         await asyncio.sleep(4) 
         except Exception as e:
@@ -188,14 +186,42 @@ async def background_task():
         await asyncio.sleep(60) 
         await unified_intelligence_scraper()
 
-# --- FASTAPI LIFESPAN MANAGER ---
+# --- SMART DEPLOYMENT FAIL-SAFE LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await telegram_client.start()
+    print("🚀 Grey Lane Server is booting up...")
+    
+    connected = False
+    attempts = 0
+    max_attempts = 5
+    
+    while not connected and attempts < max_attempts:
+        try:
+            attempts += 1
+            print(f"🔄 Connection attempt {attempts}/{max_attempts} to Telegram Matrix...")
+            
+            if telegram_client.is_connected():
+                await telegram_client.disconnect()
+                await asyncio.sleep(2)
+                
+            await telegram_client.start()
+            connected = True
+            print("🟢 Grey Lane Telethon Wire established successfully!")
+        except Exception as e:
+            print(f"⚠️ Session conflict detected: {e}")
+            print("Old server is likely still shutting down. Waiting 10 seconds to retry...")
+            await asyncio.sleep(10)
+
     asyncio.create_task(background_task())
     yield
-    await telegram_client.disconnect()
+    
+    try:
+        await telegram_client.disconnect()
+        print("🛑 Grey Lane Wire disconnected cleanly.")
+    except:
+        pass
 
+# --- FASTAPI APP INITIALIZATION ---
 app = FastAPI(title="Grey Lane OSINT Backend", lifespan=lifespan)
 
 app.add_middleware(
