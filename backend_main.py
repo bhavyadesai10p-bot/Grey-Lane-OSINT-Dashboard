@@ -11,7 +11,7 @@ import google.generativeai as genai
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 # Swapped to gemini-3-flash for the 1,500 daily request limit!
-ai_model = genai.GenerativeModel('gemini-3-flash')
+   ai_model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
 cached_incidents = []
 
