@@ -3,7 +3,6 @@ import json
 import asyncio
 import random
 import feedparser
-import urllib.request
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -38,61 +37,38 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- MACRO INTEL PIPES (NEWS) ---
+# --- THE UNIFIED INTEL PIPELINE ---
+# We use standard RSS for news, and RSSHub proxy bridges for Telegram!
 FEED_URLS = [
+    # Macro Intel (News)
     "https://www.france24.com/en/rss",         
     "https://www.rfi.fr/en/france/rss",        
-    "https://www.thelocal.fr/feed"             
+    "https://www.thelocal.fr/feed",
+    # Micro Intel (Telegram converted to RSS via public bridge)
+    "https://rsshub.app/telegram/channel/BFMTV_news",
+    "https://rsshub.app/telegram/channel/infotrafic_idf"
 ]
 
-# --- MICRO INTEL PIPES (TELEGRAM) ---
-# We use the public preview pages (t.me/s/...) to completely avoid API keys and rate limits!
-TELEGRAM_CHANNELS = [
-    "BFMTV_news",       # General French alerts
-    "infotrafic_idf"    # Example transit/traffic alerts for Paris
-]
-
-async def scrape_telegram_public():
+async def unified_intelligence_scraper():
     global cached_incidents
-    for channel in TELEGRAM_CHANNELS:
-        url = f"https://t.me/s/{channel}"
+    
+    for feed_url in FEED_URLS:
         try:
-            # Upgraded to a full, authentic Windows desktop User-Agent to prevent Telegram ghost-blocks
-            req = urllib.request.Request(
-                url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            html = await asyncio.to_thread(urllib.request.urlopen, req)
-            html_content = html.read().decode('utf-8')
+            # We use a custom User-Agent to ensure the RSS bridge accepts the request
+            feed = feedparser.parse(feed_url, agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
             
-            # Robust HTML splitting instead of strict Regex
-            parts = html_content.split('tgme_widget_message_text')
-            messages = []
-            
-            for part in parts[1:]:
-                try:
-                    start_idx = part.find('>') + 1
-                    end_idx = part.find('</div>')
-                    if start_idx > 0 and end_idx > start_idx:
-                        messages.append(part[start_idx:end_idx])
-                except:
-                    pass
-            
-            # This will force the logs to tell us if it is actually seeing the messages
-            print(f"[DEBUG] Telegram {channel}: Found {len(messages)} messages on page.")
-            
-            if messages:
-                # Grab the 2 most recent messages from the channel
-                for msg in reversed(messages[-2:]):
-                    # Clean up the raw HTML tags inside the message
-                    clean_msg = re.sub(r'<[^>]+>', ' ', msg).strip()
+            if feed.entries:
+                for entry in reversed(feed.entries[:2]): 
+                    # Combine title and description, then strip any hidden HTML tags
+                    raw_content = getattr(entry, 'title', '') + " " + getattr(entry, 'description', '')
+                    clean_text = re.sub(r'<[^>]+>', ' ', raw_content).strip()
                     
                     # Prevent duplicates
-                    already_exists = any(inc["incident"]["description"].find(clean_msg[:20]) != -1 for inc in cached_incidents)
+                    already_exists = any(inc["incident"]["description"].find(clean_text[:20]) != -1 for inc in cached_incidents)
                     
-                    if not already_exists and len(clean_msg) > 10:
+                    if not already_exists and len(clean_text) > 10:
                         prompt = f"""
-                        Read this raw Telegram intel: "{clean_msg}"
+                        Read this raw intelligence: "{clean_text}"
                         Identify the specific city, street, or landmark mentioned (assume Paris/France if vague).
                         Give the exact latitude and longitude for the location mentioned.
                         If no location is found, use central Paris (48.8566, 2.3522).
@@ -106,26 +82,31 @@ async def scrape_telegram_public():
                         
                         try:
                             response = await asyncio.to_thread(ai_model.generate_content, prompt)
-                            raw_text = response.text.strip()
+                            raw_json_text = response.text.strip()
                             
-                            if "{" in raw_text and "}" in raw_text:
-                                raw_text = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                            if "{" in raw_json_text and "}" in raw_json_text:
+                                raw_json_text = raw_json_text[raw_json_text.find("{"):raw_json_text.rfind("}")+1]
                                 
-                            ai_data = json.loads(raw_text.strip())
+                            ai_data = json.loads(raw_json_text.strip())
                             
                             lat = float(ai_data.get("lat", lat)) + random.uniform(-0.005, 0.005)
                             lng = float(ai_data.get("lng", lng)) + random.uniform(-0.005, 0.005)
                             severity = ai_data.get("severity", severity)
                         except Exception as ai_error:
-                            print(f"Telegram AI Parse failed: {ai_error}")
+                            print(f"AI Parse failed for {feed_url}: {ai_error}")
+
+                        # Dynamically categorize the marker based on where the URL came from
+                        is_telegram = "telegram" in feed_url
+                        category_name = "TELEGRAM INTEL" if is_telegram else "LIVE AI INTEL"
+                        source_display = feed_url.split('/')[-1] if is_telegram else "News Desk"
 
                         incident = {
                             "event": "new_incident",
                             "incident": {
                                 "lat": lat,
                                 "lng": lng,
-                                "category": "TELEGRAM INTEL",
-                                "description": f"<b>Ground Alert:</b><br>{clean_msg[:150]}...<br><br>Source: t.me/{channel}",
+                                "category": category_name,
+                                "description": f"<b>{clean_text[:150]}...</b><br><br>Source: {source_display}",
                                 "severity": severity
                             }
                         }
@@ -136,88 +117,20 @@ async def scrape_telegram_public():
                             
                         await manager.broadcast(incident)
                         
-                        # Speed limit bumper for Telegram processing
+                        # Speed limit bumper
                         await asyncio.sleep(4) 
-            else:
-                print(f"[DEBUG] Telegram {channel}: Could not extract message text from HTML. Telegram might be blocking the request.")
-                        
-        except Exception as e:
-            print(f"Telegram Scraper Error for {channel}: {e}")
-async def fetch_and_parse_news():
-    global cached_incidents
-    for feed_url in FEED_URLS:
-        try:
-            feed = feedparser.parse(feed_url)
-            if feed.entries:
-                for entry in reversed(feed.entries[:2]): 
-                    already_exists = any(inc["incident"]["description"].find(entry.title) != -1 for inc in cached_incidents)
-                    
-                    if not already_exists:
-                        prompt = f"""
-                        Read this news headline: "{entry.title}"
-                        Identify the specific city, country, or landmark mentioned. 
-                        Give the exact latitude and longitude for the location mentioned.
-                        If it is general French/Paris news, use central Paris (48.8566, 2.3522).
-                        Respond ONLY with a valid JSON object in this format: {{"lat": 48.8566, "lng": 2.3522, "severity": "medium"}}
-                        Determine severity (low, medium, high) based on the headline's tone.
-                        """
-                        
-                        lat = 48.8566 + random.uniform(-0.02, 0.02)
-                        lng = 2.3522 + random.uniform(-0.02, 0.02)
-                        severity = "medium"
-                        
-                        try:
-                            response = await asyncio.to_thread(ai_model.generate_content, prompt)
-                            raw_text = response.text.strip()
-                            
-                            if "{" in raw_text and "}" in raw_text:
-                                raw_text = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
-                                
-                            ai_data = json.loads(raw_text.strip())
-                            
-                            lat = float(ai_data.get("lat", lat)) + random.uniform(-0.005, 0.005)
-                            lng = float(ai_data.get("lng", lng)) + random.uniform(-0.005, 0.005)
-                            severity = ai_data.get("severity", severity)
-                        except Exception as ai_error:
-                            print(f"AI Parsing failed for {feed_url}: {ai_error}")
-
-                        source_name = "RFI Local" if "rfi" in feed_url else "The Local" if "thelocal" in feed_url else "France24 Live"
-
-                        incident = {
-                            "event": "new_incident",
-                            "incident": {
-                                "lat": lat,
-                                "lng": lng,
-                                "category": "LIVE AI INTEL",
-                                "description": f"<b>{entry.title}</b><br><br>Source: {source_name}",
-                                "severity": severity
-                            }
-                        }
-                        
-                        cached_incidents.append(incident)
-                        if len(cached_incidents) > 30: 
-                            cached_incidents.pop(0)
-                            
-                        await manager.broadcast(incident)
-                        await asyncio.sleep(4)
-                        
         except Exception as e:
             print(f"Scraper Error for {feed_url}: {e}")
 
-async def rss_scraper_task():
-    # Initial startup sweep
-    await fetch_and_parse_news()
-    await scrape_telegram_public()
-    
+async def background_task():
+    await unified_intelligence_scraper()
     while True:
-        # Paced master timer
         await asyncio.sleep(60) 
-        await fetch_and_parse_news()
-        await scrape_telegram_public()
+        await unified_intelligence_scraper()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(rss_scraper_task())
+    asyncio.create_task(background_task())
     yield
 
 app = FastAPI(title="Grey Lane OSINT Backend", lifespan=lifespan)
@@ -232,7 +145,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"status": "Grey Lane OSINT Backend is Live and Powered by AI!"}
+    return {"status": "Grey Lane OSINT Backend is Live!"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
