@@ -3,93 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grey Lane | Paris OSINT</title>
+    <title>Grey Lane | Live Paris OSINT</title>
     
-    <!-- Leaflet CSS for the map styling -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
         body {
             margin: 0;
             padding: 0;
-            font-family: 'Arial', sans-serif;
-            background-color: #121212;
-            color: #ffffff;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
         }
+
         #map {
-            width: 100vw;
+            width: 100%;
             height: 100vh;
+            z-index: 1;
         }
-        .dashboard-header {
+
+        /* Tactical UI Overlay */
+        .overlay-box {
             position: absolute;
-            top: 10px;
+            top: 20px;
             left: 50px;
+            background: rgba(10, 10, 10, 0.85);
+            border-left: 4px solid #ff0000;
+            padding: 15px 20px;
+            color: #fff;
             z-index: 1000;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px 20px;
-            border-radius: 5px;
-            border-left: 4px solid #d32f2f;
+            pointer-events: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .overlay-box h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 1px;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #00ff00;
+            margin-top: 5px;
+        }
+
+        /* --- THE NEW TACTICAL RADAR PINS --- */
+        .osint-marker {
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .severity-high {
+            background-color: rgba(255, 0, 0, 0.8);
+            box-shadow: 0 0 10px red;
+            animation: pulse-high 1.2s infinite;
+        }
+
+        .severity-medium {
+            background-color: rgba(255, 165, 0, 0.8);
+            box-shadow: 0 0 10px orange;
+            animation: pulse-medium 2s infinite;
+        }
+
+        .severity-low {
+            background-color: rgba(0, 150, 255, 0.8);
+            box-shadow: 0 0 10px #0096ff;
+        }
+
+        /* Animation Keyframes for the pulsing effect */
+        @keyframes pulse-high {
+            0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+        }
+
+        @keyframes pulse-medium {
+            0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 165, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); }
+        }
+
+        /* Custom Popup Styling */
+        .leaflet-popup-content-wrapper {
+            background: #111;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+        .leaflet-popup-tip {
+            background: #111;
         }
     </style>
 </head>
 <body>
 
-    <div class="dashboard-header">
-        <h2>Grey Lane | Live Paris OSINT</h2>
-        <!-- This will start Yellow, turn Green on connect, or Red if it fails -->
-        <p id="status-text" style="color: #ff9800; font-size: 14px; margin-top: -10px;">Backend: Waking up Render server...</p>
+    <div class="overlay-box">
+        <h1>Grey Lane | Paris OSINT</h1>
+        <div class="status" id="status-text">Connecting to intelligence feed...</div>
     </div>
 
     <div id="map"></div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // 1. Initialize Map
-        const map = L.map('map').setView([48.8566, 2.3522], 13);
+        // 1. Initialize the Dark Map
+        const map = L.map('map', {
+            center: [48.8566, 2.3522], 
+            zoom: 12,
+            zoomControl: false
+        });
 
-        // 2. Add Dark Theme
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            subdomains: 'abcd',
-            maxZoom: 20
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19
         }).addTo(map);
 
-        // 3. Drop Test Pin
-        L.marker([48.8584, 2.2945]).addTo(map)
-            .bindPopup("<b>Test Intel:</b> Systems Online.")
-            .openPopup();
-
-        // 4. Connect WebSocket to Render
-        const backendUrl = 'wss://grey-lane-osint-dashboard.onrender.com/ws';
-        const ws = new WebSocket(backendUrl);
+        // 2. Connect to the Render Backend Pipe
+        const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
+        const ws = new WebSocket(wsUrl);
+        const statusText = document.getElementById("status-text");
 
         ws.onopen = function() {
-            console.log("Connected to Grey Lane Backend");
-            document.getElementById('status-text').innerText = 'Backend: Live & Connected';
-            document.getElementById('status-text').style.color = '#4caf50'; // Turns Green
-        };
-
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            if (data.event === 'new_incident') {
-                const inc = data.incident;
-                L.circleMarker([inc.lat, inc.lng], {
-                    color: '#d32f2f',
-                    fillColor: '#f44336',
-                    fillOpacity: 0.8,
-                    radius: 8
-                }).addTo(map)
-                  .bindPopup(`<b>${inc.category.toUpperCase()}</b><br>${inc.description}<br><small>Severity: ${inc.severity}</small>`)
-                  .openPopup();
-            }
+            statusText.innerHTML = "Backend: Live & Connected";
+            statusText.style.color = "#00ff00"; // Green
         };
 
         ws.onclose = function() {
-            console.log("Disconnected from backend");
-            document.getElementById('status-text').innerText = 'Backend: Disconnected (Server Asleep)';
-            document.getElementById('status-text').style.color = '#f44336'; // Turns Red
+            statusText.innerHTML = "Backend: Disconnected (Reconnecting...)";
+            statusText.style.color = "#ff0000"; // Red
+        };
+
+        // 3. Listen for Intelligence Data
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.event === "new_incident") {
+                const inc = data.incident;
+                
+                // Determine the tactical styling based on Gemini's severity rating
+                let severityClass = "severity-low"; 
+                if (inc.severity.toLowerCase() === "high") severityClass = "severity-high";
+                if (inc.severity.toLowerCase() === "medium") severityClass = "severity-medium";
+
+                // Create the custom HTML radar pin
+                const tacticalIcon = L.divIcon({
+                    className: `osint-marker ${severityClass}`,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7] // Centers the dot exactly on the coordinate
+                });
+
+                // Drop the pin on the map
+                const marker = L.marker([inc.lat, inc.lng], { icon: tacticalIcon }).addTo(map);
+                
+                // Format the popup box
+                marker.bindPopup(`
+                    <div style="font-family: Courier New, monospace;">
+                        <strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>
+                        ${inc.description}<br><br>
+                        <span style="color: #888;">Severity Assessment: ${inc.severity.toUpperCase()}</span>
+                    </div>
+                `);
+            }
         };
     </script>
 </body>
