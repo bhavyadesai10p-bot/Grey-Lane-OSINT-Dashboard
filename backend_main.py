@@ -186,11 +186,9 @@ async def background_task():
         await asyncio.sleep(60) 
         await unified_intelligence_scraper()
 
-# --- SMART DEPLOYMENT FAIL-SAFE LIFESPAN ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("🚀 Grey Lane Server is booting up...")
-    
+# --- NON-BLOCKING DEPLOYMENT FAIL-SAFE ---
+async def telegram_connect_task():
+    print("🚀 Background connection task to Telegram Matrix started...")
     connected = False
     attempts = 0
     max_attempts = 5
@@ -206,12 +204,16 @@ async def lifespan(app: FastAPI):
                 
             await telegram_client.start()
             connected = True
-            print("🟢 Grey Lane Telethon Wire established successfully!")
+            print("官 Grey Lane Telethon Wire established successfully!")
         except Exception as e:
             print(f"⚠️ Session conflict detected: {e}")
-            print("Old server is likely still shutting down. Waiting 10 seconds to retry...")
+            print("Waiting 10 seconds to retry...")
             await asyncio.sleep(10)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This fires tasks instantly without waiting, letting FastAPI open its port right away
+    asyncio.create_task(telegram_connect_task())
     asyncio.create_task(background_task())
     yield
     
