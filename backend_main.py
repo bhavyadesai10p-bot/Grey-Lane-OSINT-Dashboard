@@ -39,12 +39,15 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- SYSTEM 1: TELEGRAM NATIVE LISTENER (REAL-TIME) ---
+# --- PARIS HUB GEOLOCATION DEFINITION ---
+PARIS_CENTER_LAT = 48.8566
+PARIS_CENTER_LNG = 2.3522
+
+# --- SYSTEM 1: TELEGRAM NATIVE LISTENER (REAL-TIME PARIS) ---
 api_id = int(os.environ.get("TELEGRAM_API_ID", 0))
 api_hash = os.environ.get("TELEGRAM_API_HASH", "")
 session_string = os.environ.get("TELEGRAM_SESSION", "")
 
-# Initialize the official Telegram client with your master key
 telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
 TELEGRAM_CHANNELS = ["BFMTV_news", "infotrafic_idf"]
 
@@ -56,17 +59,22 @@ async def telegram_handler(event):
         return
         
     clean_text = raw_text.replace('\n', ' ').strip()
-    channel_name = event.chat.username if event.chat else "Telegram Intel"
+    channel_name = event.chat.username if event.chat else "Paris Intel"
 
     prompt = f"""
-    Read this raw real-time Telegram intelligence: "{clean_text}"
-    Identify the specific city, street, or landmark mentioned (assume Paris/France if vague).
-    Give the exact latitude and longitude. Use central Paris (48.8566, 2.3522) if no location is found.
-    Respond ONLY with a valid JSON object: {{"lat": 48.8566, "lng": 2.3522, "severity": "high"}}
-    Determine severity (low, medium, high) based on if it mentions protests, police, accidents, etc.
-    """
+    Analyze this tactical intelligence report: "{clean_text}"
     
-    lat, lng, severity = 48.8566 + random.uniform(-0.02, 0.02), 2.3522 + random.uniform(-0.02, 0.02), "medium"
+    CRITICAL RULES:
+    1. Determine if this event is happening in Paris or the Île-de-France region. If it is NOT related to Paris/France at all, set "is_paris" to false.
+    2. Look for street names (e.g., Rue de Rivoli), shops, landmarks (e.g., Louvre), or Arrondissements (e.g., 10ème).
+    3. If a specific street/shop/landmark is found, provide its exact lat/lng.
+    4. If it is a general Paris alert with NO specific address, set "exact_location_found" to false and use the default Paris coordinates (48.8566, 2.3522).
+    
+    Respond ONLY with this valid JSON format:
+    {{"is_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "high", "category": "PROTEST"}}
+    
+    Categories can be: PROTEST, ROBBERY, TRAFFIC, SECURITY, or GENERAL.
+    """
     
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
@@ -74,28 +82,41 @@ async def telegram_handler(event):
         if "{" in raw_json_text and "}" in raw_json_text:
             raw_json_text = raw_json_text[raw_json_text.find("{"):raw_json_text.rfind("}")+1]
         ai_data = json.loads(raw_json_text)
-        lat = float(ai_data.get("lat", lat)) + random.uniform(-0.005, 0.005)
-        lng = float(ai_data.get("lng", lng)) + random.uniform(-0.005, 0.005)
-        severity = ai_data.get("severity", severity)
+        
+        # Drop it if it's completely outside our tactical theater
+        if not ai_data.get("is_paris", True):
+            return
+
+        lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
+        lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
+        
+        # If it's general news, cluster it slightly offset from center so dots don't stack directly on top of each other
+        if not ai_data.get("exact_location_found", True):
+            lat += random.uniform(-0.008, 0.008)
+            lng += random.uniform(-0.008, 0.008)
+
+        category = ai_data.get("category", "TELEGRAM INTEL").upper()
+        severity = ai_data.get("severity", "medium")
     except Exception as e:
-        print(f"Telegram AI Parse Error: {e}")
+        print(f"Paris AI Parse Error: {e}")
+        return
 
     incident = {
         "event": "new_incident",
         "incident": {
             "lat": lat,
             "lng": lng,
-            "category": "TELEGRAM INTEL",
-            "description": f"<b>🚨 LIVE GROUND ALERT</b><br>{clean_text[:150]}...<br><br>Source: t.me/{channel_name}",
+            "category": category,
+            "description": f"<b>🚨 LIVE PARIS INTEL</b><br>{clean_text[:160]}...<br><br>Source: t.me/{channel_name}",
             "severity": severity
         }
     }
     
     cached_incidents.append(incident)
-    if len(cached_incidents) > 30: cached_incidents.pop(0)
+    if len(cached_incidents) > 200: cached_incidents.pop(0) # Expanded Memory
     await manager.broadcast(incident)
 
-# --- SYSTEM 2: TRADITIONAL NEWS SCRAPER (POLLING) ---
+# --- SYSTEM 2: TRADITIONAL NEWS SCRAPER (POLLING PARIS ONLY) ---
 FEED_URLS = [
     "https://www.france24.com/en/rss",         
     "https://www.rfi.fr/en/france/rss",        
@@ -108,41 +129,55 @@ async def unified_intelligence_scraper():
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                for entry in reversed(feed.entries[:2]): 
+                # Up the intake to grab up to 15 items to look for Paris news
+                for entry in reversed(feed.entries[:15]): 
                     raw_content = getattr(entry, 'title', '') + " " + getattr(entry, 'description', '')
                     clean_text = re.sub(r'<[^>]+>', ' ', raw_content).strip()
                     already_exists = any(inc["incident"]["description"].find(clean_text[:20]) != -1 for inc in cached_incidents)
                     
                     if not already_exists and len(clean_text) > 10:
                         prompt = f"""
-                        Read this raw news intelligence: "{clean_text}"
-                        Identify the specific city, street, or landmark mentioned (assume Paris/France if vague).
-                        Give exact latitude and longitude. Default to central Paris (48.8566, 2.3522).
-                        Respond ONLY with a valid JSON object: {{"lat": 48.8566, "lng": 2.3522, "severity": "high"}}
-                        Determine severity (low, medium, high).
+                        Analyze this news report: "{clean_text}"
+                        If this event is not explicitly happening in or directly affecting Paris/Île-de-France, set "is_paris" to false.
+                        If it is in Paris, extract any granular landmarks, roads, or storefronts.
+                        
+                        Respond ONLY with this JSON layout:
+                        {{"is_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "SECURITY"}}
                         """
-                        lat, lng, severity = 48.8566 + random.uniform(-0.02, 0.02), 2.3522 + random.uniform(-0.02, 0.02), "medium"
                         try:
                             response = await asyncio.to_thread(ai_model.generate_content, prompt)
                             raw_json_text = response.text.strip()
                             if "{" in raw_json_text and "}" in raw_json_text:
                                 raw_json_text = raw_json_text[raw_json_text.find("{"):raw_json_text.rfind("}")+1]
                             ai_data = json.loads(raw_json_text)
-                            lat, lng, severity = float(ai_data.get("lat", lat)), float(ai_data.get("lng", lng)), ai_data.get("severity", severity)
-                        except: pass
+                            
+                            if not ai_data.get("is_paris", False):
+                                continue # Throw away non-Paris global news!
 
-                        source_display = "France24 Live" if "france24" in feed_url else "RFI Local" if "rfi" in feed_url else "The Local" if "thelocal" in feed_url else "News Desk"
+                            lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
+                            lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
+                            
+                            if not ai_data.get("exact_location_found", True):
+                                lat += random.uniform(-0.01, 0.01)
+                                lng += random.uniform(-0.01, 0.01)
+                                
+                            severity = ai_data.get("severity", "medium")
+                            category = ai_data.get("category", "LIVE AI INTEL").upper()
+                        except: 
+                            continue
+
+                        source_display = "France24" if "france24" in feed_url else "RFI" if "rfi" in feed_url else "The Local"
                         
                         incident = {
                             "event": "new_incident",
                             "incident": {
-                                "lat": lat, "lng": lng, "category": "LIVE AI INTEL",
-                                "description": f"<b>{clean_text[:150]}...</b><br><br>Source: {source_display}",
+                                "lat": lat, "lng": lng, "category": category,
+                                "description": f"<b>{clean_text[:160]}...</b><br><br>Source: {source_display} Paris Desk",
                                 "severity": severity
                             }
                         }
                         cached_incidents.append(incident)
-                        if len(cached_incidents) > 30: cached_incidents.pop(0)
+                        if len(cached_incidents) > 200: cached_incidents.pop(0) # Expanded Memory
                         await manager.broadcast(incident)
                         await asyncio.sleep(4) 
         except Exception as e:
@@ -157,12 +192,9 @@ async def background_task():
 # --- FASTAPI LIFESPAN MANAGER ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Boot up the Telegram native listener
     await telegram_client.start()
-    # Boot up the News polling loop
     asyncio.create_task(background_task())
     yield
-    # Safely disconnect Telegram when server shuts down
     await telegram_client.disconnect()
 
 app = FastAPI(title="Grey Lane OSINT Backend", lifespan=lifespan)
@@ -177,7 +209,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"status": "Grey Lane OSINT Backend is Live with Native Telegram Integration!"}
+    return {"status": "Grey Lane Paris OSINT Command System is Online."}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
