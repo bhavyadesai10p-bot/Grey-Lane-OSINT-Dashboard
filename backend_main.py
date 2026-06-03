@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
     
     telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
     
-    @telegram_client.on(events.NewMessage())
+    @telegram_client.on(events.NewMessage(incoming=True, outgoing=True))
     async def telegram_handler(event):
         global cached_incidents
         raw_text = event.raw_text
