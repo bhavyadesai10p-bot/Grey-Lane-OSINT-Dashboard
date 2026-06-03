@@ -49,12 +49,18 @@ api_hash = os.environ.get("TELEGRAM_API_HASH", "")
 session_string = os.environ.get("TELEGRAM_SESSION", "")
 
 telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
-TELEGRAM_CHANNELS = ["BFMTV_news", "infotrafic_idf", "greylane_test_paris"]
+
+# ADDED @ SYMBOLS SO TELETHON RECOGNIZES PUBLIC CHANNELS
+TELEGRAM_CHANNELS = ["@BFMTV_news", "@infotrafic_idf", "@greylane_test_paris"]
 
 @telegram_client.on(events.NewMessage(chats=TELEGRAM_CHANNELS))
 async def telegram_handler(event):
     global cached_incidents
     raw_text = event.message.text
+    
+    # NEW DEBUG LINE: Proves the server is hearing the channel
+    print(f"🚨 INCOMING TELEGRAM MESSAGE: {raw_text}")
+    
     if not raw_text or len(raw_text) < 10:
         return
         
@@ -204,7 +210,7 @@ async def telegram_connect_task():
                 
             await telegram_client.start()
             connected = True
-            print("官 Grey Lane Telethon Wire established successfully!")
+            print("🟢 Grey Lane Telethon Wire established successfully!")
         except Exception as e:
             print(f"⚠️ Session conflict detected: {e}")
             print("Waiting 10 seconds to retry...")
