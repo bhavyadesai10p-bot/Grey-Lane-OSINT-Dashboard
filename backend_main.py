@@ -38,50 +38,47 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
+PARIS_CENTER_LAT, PARIS_CENTER_LNG = 48.8566, 2.3522
 
-# --- PARIS HUB GEOLOCATION DEFINITION ---
-PARIS_CENTER_LAT = 48.8566
-PARIS_CENTER_LNG = 2.3522
-
-# --- SYSTEM 1: TELEGRAM NATIVE LISTENER (REAL-TIME PARIS) ---
+# --- SYSTEM 1: TELEGRAM FLOODGATE LISTENER ---
 api_id = int(os.environ.get("TELEGRAM_API_ID", 0))
 api_hash = os.environ.get("TELEGRAM_API_HASH", "")
 session_string = os.environ.get("TELEGRAM_SESSION", "")
 
 telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
 
-# ADDED @ SYMBOLS SO TELETHON RECOGNIZES PUBLIC CHANNELS
-TELEGRAM_CHANNELS = ["@BFMTV_news", "@infotrafic_idf", "@greylane_test_paris"]
-
-@telegram_client.on(events.NewMessage(chats=TELEGRAM_CHANNELS))
+# We removed the strict chats= filter to bypass the Telethon bug. 
+# It will now catch the message first, THEN verify the channel name.
+@telegram_client.on(events.NewMessage())
 async def telegram_handler(event):
     global cached_incidents
-    raw_text = event.message.text
+    raw_text = event.raw_text
     
-    # NEW DEBUG LINE: Proves the server is hearing the channel
-    print(f"🚨 INCOMING TELEGRAM MESSAGE: {raw_text}")
-    
-    if not raw_text or len(raw_text) < 10:
-        return
+    # Get the name of the chat safely
+    try:
+        chat = await event.get_chat()
+        chat_name = getattr(chat, 'username', None) or getattr(chat, 'title', 'Unknown')
+    except:
+        chat_name = "Unknown"
         
-    clean_text = raw_text.replace('\n', ' ').strip()
-    channel_name = event.chat.username if event.chat else "Paris Intel"
+    print(f"🚨 RAW TELEGRAM PING [{chat_name}]: {str(raw_text)[:60]}...")
+    
+    # Manually filter for our targets
+    allowed_channels = ["BFMTV_news", "infotrafic_idf", "greylane_test_paris"]
+    if chat_name not in allowed_channels:
+        return 
+        
+    print(f"✅ TARGET MATCHED! Geocoding message from {chat_name}...")
 
     prompt = f"""
-    Analyze this tactical intelligence report: "{clean_text}"
-    
+    Analyze this tactical intelligence report: "{raw_text}"
     CRITICAL RULES:
-    1. Determine if this event is happening in Paris or the Île-de-France region. If it is NOT related to Paris/France at all, set "is_paris" to false.
-    2. Look for street names (e.g., Rue de Rivoli), shops, landmarks (e.g., Louvre), or Arrondissements (e.g., 10ème).
-    3. If a specific street/shop/landmark is found, provide its exact lat/lng.
-    4. If it is a general Paris alert with NO specific address, set "exact_location_found" to false and use the default Paris coordinates (48.8566, 2.3522).
-    
-    Respond ONLY with this valid JSON format:
+    1. Determine if this event is happening in Paris or Île-de-France. If NOT, set "is_paris" to false.
+    2. If a specific street/landmark is found, provide its exact lat/lng.
+    3. If general Paris alert, set "exact_location_found" to false and use default (48.8566, 2.3522).
+    Respond ONLY with this valid JSON:
     {{"is_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "high", "category": "PROTEST"}}
-    
-    Categories can be: PROTEST, ROBBERY, TRAFFIC, SECURITY, or GENERAL.
     """
-    
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
         raw_json_text = response.text.strip()
@@ -94,46 +91,37 @@ async def telegram_handler(event):
 
         lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
         lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
-        
         if not ai_data.get("exact_location_found", True):
             lat += random.uniform(-0.008, 0.008)
             lng += random.uniform(-0.008, 0.008)
 
-        category = ai_data.get("category", "TELEGRAM INTEL").upper()
-        severity = ai_data.get("severity", "medium")
-    except Exception as e:
-        print(f"Paris AI Parse Error: {e}")
-        return
-
-    incident = {
-        "event": "new_incident",
-        "incident": {
-            "lat": lat,
-            "lng": lng,
-            "category": category,
-            "description": f"<b>🚨 LIVE PARIS INTEL</b><br>{clean_text[:160]}...<br><br>Source: t.me/{channel_name}",
-            "severity": severity
+        incident = {
+            "event": "new_incident",
+            "incident": {
+                "lat": lat, "lng": lng, 
+                "category": ai_data.get("category", "TELEGRAM").upper(),
+                "description": f"<b>🚨 LIVE PARIS INTEL</b><br>{raw_text[:160]}...<br><br>Source: t.me/{chat_name}",
+                "severity": ai_data.get("severity", "medium")
+            }
         }
-    }
-    
-    cached_incidents.append(incident)
-    if len(cached_incidents) > 200: cached_incidents.pop(0) 
-    await manager.broadcast(incident)
+        cached_incidents.append(incident)
+        if len(cached_incidents) > 200: cached_incidents.pop(0) 
+        await manager.broadcast(incident)
+        print("📍 TELEGRAM DOT DROPPED ON MAP!")
+    except Exception as e:
+        print(f"❌ Telegram AI Error: {e}")
 
-# --- SYSTEM 2: TRADITIONAL NEWS SCRAPER (POLLING PARIS ONLY) ---
-FEED_URLS = [
-    "https://www.france24.com/en/rss",         
-    "https://www.rfi.fr/en/france/rss",        
-    "https://www.thelocal.fr/feed"
-]
+# --- SYSTEM 2: LOUD NEWS SCRAPER ---
+FEED_URLS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
 
 async def unified_intelligence_scraper():
     global cached_incidents
+    print("📰 Starting Background Sweep of France24 & RFI...")
     for feed_url in FEED_URLS:
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                for entry in reversed(feed.entries[:15]): 
+                for entry in reversed(feed.entries[:5]): # Reduced to 5 so it processes faster
                     raw_content = getattr(entry, 'title', '') + " " + getattr(entry, 'description', '')
                     clean_text = re.sub(r'<[^>]+>', ' ', raw_content).strip()
                     already_exists = any(inc["incident"]["description"].find(clean_text[:20]) != -1 for inc in cached_incidents)
@@ -141,50 +129,41 @@ async def unified_intelligence_scraper():
                     if not already_exists and len(clean_text) > 10:
                         prompt = f"""
                         Analyze this news report: "{clean_text}"
-                        If this event is not explicitly happening in or directly affecting Paris/Île-de-France, set "is_paris" to false.
-                        If it is in Paris, extract any granular landmarks, roads, or storefronts.
-                        
+                        If this event is not explicitly happening in Paris/Île-de-France, set "is_paris" to false.
+                        If it is in Paris, extract exact lat/lng.
                         Respond ONLY with this JSON layout:
                         {{"is_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "SECURITY"}}
                         """
                         try:
                             response = await asyncio.to_thread(ai_model.generate_content, prompt)
-                            raw_json_text = response.text.strip()
-                            if "{" in raw_json_text and "}" in raw_json_text:
-                                raw_json_text = raw_json_text[raw_json_text.find("{"):raw_json_text.rfind("}")+1]
-                            ai_data = json.loads(raw_json_text)
+                            raw_json = response.text.strip()
+                            if "{" in raw_json: raw_json = raw_json[raw_json.find("{"):raw_json.rfind("}")+1]
+                            ai_data = json.loads(raw_json)
                             
                             if not ai_data.get("is_paris", False):
                                 continue 
-
+                            
+                            print(f"📍 Found Paris News! Geocoding: {clean_text[:40]}...")
                             lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
                             lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
                             
-                            if not ai_data.get("exact_location_found", True):
-                                lat += random.uniform(-0.01, 0.01)
-                                lng += random.uniform(-0.01, 0.01)
-                                
-                            severity = ai_data.get("severity", "medium")
-                            category = ai_data.get("category", "LIVE AI INTEL").upper()
+                            incident = {
+                                "event": "new_incident",
+                                "incident": {
+                                    "lat": lat, "lng": lng, "category": ai_data.get("category", "NEWS").upper(),
+                                    "description": f"<b>{clean_text[:160]}...</b><br><br>Source: News Desk",
+                                    "severity": ai_data.get("severity", "medium")
+                                }
+                            }
+                            cached_incidents.append(incident)
+                            if len(cached_incidents) > 200: cached_incidents.pop(0) 
+                            await manager.broadcast(incident)
+                            await asyncio.sleep(2) 
                         except: 
                             continue
-
-                        source_display = "France24" if "france24" in feed_url else "RFI" if "rfi" in feed_url else "The Local"
-                        
-                        incident = {
-                            "event": "new_incident",
-                            "incident": {
-                                "lat": lat, "lng": lng, "category": category,
-                                "description": f"<b>{clean_text[:160]}...</b><br><br>Source: {source_display} Paris Desk",
-                                "severity": severity
-                            }
-                        }
-                        cached_incidents.append(incident)
-                        if len(cached_incidents) > 200: cached_incidents.pop(0) 
-                        await manager.broadcast(incident)
-                        await asyncio.sleep(4) 
         except Exception as e:
-            print(f"Scraper Error for {feed_url}: {e}")
+            pass
+    print("✅ Background Sweep Complete.")
 
 async def background_task():
     await unified_intelligence_scraper()
@@ -192,63 +171,34 @@ async def background_task():
         await asyncio.sleep(60) 
         await unified_intelligence_scraper()
 
-# --- NON-BLOCKING DEPLOYMENT FAIL-SAFE ---
+# --- FASTAPI LIFESPAN ---
 async def telegram_connect_task():
-    print("🚀 Background connection task to Telegram Matrix started...")
-    connected = False
-    attempts = 0
-    max_attempts = 5
-    
-    while not connected and attempts < max_attempts:
-        try:
-            attempts += 1
-            print(f"🔄 Connection attempt {attempts}/{max_attempts} to Telegram Matrix...")
-            
-            if telegram_client.is_connected():
-                await telegram_client.disconnect()
-                await asyncio.sleep(2)
-                
-            await telegram_client.start()
-            connected = True
-            print("🟢 Grey Lane Telethon Wire established successfully!")
-        except Exception as e:
-            print(f"⚠️ Session conflict detected: {e}")
-            print("Waiting 10 seconds to retry...")
-            await asyncio.sleep(10)
+    print("🚀 Booting Telegram Matrix...")
+    try:
+        await telegram_client.start()
+        print("🟢 Grey Lane Telethon Wire established successfully!")
+    except Exception as e:
+        print(f"⚠️ Session error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # This fires tasks instantly without waiting, letting FastAPI open its port right away
     asyncio.create_task(telegram_connect_task())
     asyncio.create_task(background_task())
     yield
-    
     try:
         await telegram_client.disconnect()
-        print("🛑 Grey Lane Wire disconnected cleanly.")
-    except:
-        pass
+    except: pass
 
-# --- FASTAPI APP INITIALIZATION ---
-app = FastAPI(title="Grey Lane OSINT Backend", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Grey Lane Backend", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 @app.get("/")
-def read_root():
-    return {"status": "Grey Lane Paris OSINT Command System is Online."}
+def read_root(): return {"status": "Online"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        while True:
-            await websocket.receive_text()
+        while True: await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
