@@ -31,8 +31,9 @@
             padding: 15px 20px;
             color: #fff;
             z-index: 1000;
-            pointer-events: none;
+            pointer-events: auto; /* Changed to auto so you can click the checkbox */
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-radius: 2px;
         }
 
         .overlay-box h1 {
@@ -45,6 +46,12 @@
             font-size: 14px;
             color: #00ff00;
             margin-top: 5px;
+        }
+        
+        .control-panel {
+            margin-top: 15px; 
+            border-top: 1px solid #333; 
+            padding-top: 12px;
         }
 
         /* --- THE NEW TACTICAL RADAR PINS --- */
@@ -83,7 +90,7 @@
             100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); }
         }
 
-        /* Custom Popup Styling */
+        /* Custom Popup & Tooltip Styling */
         .leaflet-popup-content-wrapper {
             background: #111;
             color: #fff;
@@ -93,6 +100,13 @@
         .leaflet-popup-tip {
             background: #111;
         }
+        .transit-tooltip {
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid #444;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -100,6 +114,13 @@
     <div class="overlay-box">
         <h1>Grey Lane | Paris OSINT</h1>
         <div class="status" id="status-text">Connecting to intelligence feed...</div>
+        
+        <div class="control-panel">
+            <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa; transition: color 0.3s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">
+                <input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)" style="margin-right: 10px; cursor: pointer;">
+                [X] ENABLE TRANSIT GRID
+            </label>
+        </div>
     </div>
 
     <div id="map"></div>
@@ -120,6 +141,37 @@
             attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
             maxZoom: 19
         }).addTo(map);
+
+        // --- NEW: TRANSIT OVERLAY DATA & LOGIC ---
+        let transitLayer = L.layerGroup(); // Holds the lines so they don't mix with news dots
+
+        const METRO_LINES = [
+            {name: 'M1', color: '#F2C931', coords: [[48.872,2.284], [48.869,2.308], [48.863,2.332], [48.857,2.349], [48.848,2.396]]},
+            {name: 'M4', color: '#A0006E', coords: [[48.891,2.343], [48.876,2.343], [48.858,2.349], [48.825,2.332]]},
+            {name: 'M6', color: '#83C491', coords: [[48.845,2.282], [48.848,2.306], [48.851,2.330], [48.851,2.400]]},
+            {name: 'M13', color: '#6EC4E8', coords: [[48.916,2.329], [48.903,2.338], [48.883,2.338], [48.860,2.332], [48.818,2.296]]},
+            {name: 'RER A', color: '#D00000', coords: [[48.870,2.209], [48.865,2.287], [48.858,2.350], [48.850,2.440], [48.835,2.520]]},
+            {name: 'RER B', color: '#4169E1', coords: [[48.944,2.357], [48.900,2.350], [48.860,2.347], [48.810,2.321], [48.760,2.310]]},
+        ];
+
+        function renderTransitLines() {
+            transitLayer.clearLayers(); 
+            METRO_LINES.forEach(line => {
+                L.polyline(line.coords, { color: line.color, weight: 4, opacity: 0.85 })
+                  .addTo(transitLayer)
+                  .bindTooltip(line.name, { sticky: true, className: 'transit-tooltip' });
+            });
+        }
+
+        function toggleTransit(isOn) {
+            if (isOn) {
+                renderTransitLines();
+                map.addLayer(transitLayer);
+            } else {
+                map.removeLayer(transitLayer);
+            }
+        }
+        // -----------------------------------------
 
         // 2. Connect to the Render Backend Pipe
         const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
