@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI):
     
     telegram_client = TelegramClient(StringSession(session_string), api_id, api_hash)
     
+    # MODIFICATION 1: Listen to both incoming and outgoing channel updates
     @telegram_client.on(events.NewMessage(incoming=True, outgoing=True))
     async def telegram_handler(event):
         global cached_incidents
@@ -108,7 +109,6 @@ async def lifespan(app: FastAPI):
             
         print(f"🚨 RAW TELEGRAM PING [{chat_name}]: {str(raw_text)[:60]}...")
         
-        # We listen to everything to guarantee it catches your test
         print(f"✅ AI Geocoding message from {chat_name}...")
         prompt = f"""
         Analyze this tactical intelligence report: "{raw_text}"
@@ -147,9 +147,12 @@ async def lifespan(app: FastAPI):
             print(f"❌ Telegram AI Error: {e}")
 
     try:
-        # We changed connect() to start() so it actively listens to the live feed
         await telegram_client.start()
-        print("🟢 Telegram is authorized and fully listening!")
+        
+        # MODIFICATION 2: Force server to download and cache channel entities on startup
+        await telegram_client.get_dialogs()
+        
+        print("🟢 Telegram is authorized, chat cache populated, and fully listening!")
     except Exception as e:
         print(f"⚠️ Telegram Connection Error: {e}")
         
