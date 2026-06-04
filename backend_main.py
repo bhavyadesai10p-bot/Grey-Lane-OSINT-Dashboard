@@ -4,6 +4,8 @@ import asyncio
 import random
 import feedparser
 import re
+import sqlite3
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,8 +15,6 @@ import google.generativeai as genai
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 ai_model = genai.GenerativeModel('gemini-3.1-flash-lite')
 
-cached_incidents = []
-
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -22,7 +22,8 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        for incident in cached_incidents:
+        # On connection, stream the unexpired history from database
+        for incident in get_stored_incidents():
             await websocket.send_json(incident)
 
     def disconnect(self, websocket: WebSocket):
@@ -37,20 +38,78 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 PARIS_CENTER_LAT, PARIS_CENTER_LNG = 48.8566, 2.3522
+DB_FILE = "greylane_local.db"
+
+# --- SYSTEM 1: AUTOMATIC LIFETIME-FREE SQLITE DATABASE ---
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lat REAL,
+            lng REAL,
+            category TEXT,
+            description TEXT,
+            severity TEXT,
+            ingested_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def store_incident(inc):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO incidents (lat, lng, category, description, severity, ingested_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (inc['lat'], inc['lng'], inc['category'], inc['description'], inc['severity'], datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def get_stored_incidents():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT lat, lng, category, description, severity FROM incidents")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    incidents = []
+    for r in rows:
+        incidents.append({
+            "event": "new_incident",
+            "incident": {"lat": r[0], "lng": r[1], "category": r[2], "description": r[3], "severity": r[4]}
+        })
+    return incidents
+
+def database_auto_scrub():
+    """Removes all tactical data older than 24 hours to prevent cluttering routing calculations"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    time_threshold = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+    cursor.execute("DELETE FROM incidents WHERE ingested_at < ?", (time_threshold,))
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    if deleted_count > 0:
+        print(f"🧹 DATABASE AUTO-SCRUB: Cleared {deleted_count} expired threat profiles (>24h).")
 
 # --- DATA SOURCE FEEDS ---
 NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
-# Live Paris RATP/SNCF Disruption Feed (via clean RSS stream)
 TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
 
-# --- CORE INTEL PROCESSING ENGINE ---
 async def process_raw_report(title, description, source_type, source_name):
-    global cached_incidents
     clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
     
-    # Prevent duplicate pings
-    already_exists = any(inc["incident"]["description"].find(clean_text[:20]) != -1 for inc in cached_incidents)
-    if already_exists or len(clean_text) < 10:
+    # Check memory cache & DB to avoid duplicates
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM incidents WHERE description LIKE ?", (f"%{clean_text[:20]}%",))
+    exists = cursor.fetchone()[0]
+    conn.close()
+    
+    if exists or len(clean_text) < 10:
         return
 
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
@@ -65,7 +124,7 @@ async def process_raw_report(title, description, source_type, source_name):
     1. Determine if this event marks a safety risk, strike, civil unrest, crime, or active transit disruption inside Paris or the Île-de-France region. If it's unrelated to Paris urban safety/infrastructure, set "relevant_to_paris" to false.
     2. Extract the exact Paris street, landmark, metro line, or train station mentioned. Lookup and provide its precise latitude and longitude.
     3. If it is an active disruption or protest relevant to Paris but no exact street/station is named, set "exact_location_found" to false and use default center coordinates (48.8566, 2.3522).
-    4. Map "category" strictly to: PROTEST, DAMAGE, CRIME, TRANSIT, or SECURITY. (For train delays/station closures, use TRANSIT).
+    4. Map "category" strictly to: PROTEST, DAMAGE, CRIME, TRANSIT, or SECURITY. 
     5. Determine "severity" strictly as: low, medium, or high.
 
     Respond ONLY with this valid JSON template. No markdown wrappers, no comments, no extra text:
@@ -86,33 +145,33 @@ async def process_raw_report(title, description, source_type, source_name):
         lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
         lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
         
-        # Add a tiny offset only if it hit the default center so dots don't stack up perfectly
         if not ai_data.get("exact_location_found", False):
             lat += random.uniform(-0.005, 0.005)
             lng += random.uniform(-0.005, 0.005)
 
-        incident = {
-            "event": "new_incident",
-            "incident": {
-                "lat": lat, 
-                "lng": lng, 
-                "category": ai_data.get("category", source_type).upper(),
-                "description": f"<b>🚨 {source_type} ALERT: {title}</b><br><br>{description[:160]}...<br><br>Source: {source_name}",
-                "severity": ai_data.get("severity", "medium").lower()
-            }
+        incident_data = {
+            "lat": lat, 
+            "lng": lng, 
+            "category": ai_data.get("category", source_type).upper(),
+            "description": f"<b>🚨 {source_type} ALERT: {title}</b><br><br>{description[:160]}...<br><br>Source: {source_name}",
+            "severity": ai_data.get("severity", "medium").lower()
         }
         
-        cached_incidents.append(incident)
-        if len(cached_incidents) > 100: cached_incidents.pop(0) 
-            
-        await manager.broadcast(incident)
-        print(f"📍 REAL-TIME AI DROP: [{ai_data.get('category')}] at ({lat:.4f}, {lng:.4f})")
+        # Persist to local database permanently
+        store_incident(incident_data)
+        
+        payload = {"event": "new_incident", "incident": incident_data}
+        await manager.broadcast(payload)
+        print(f"📍 REAL-TIME AI DROP: [{incident_data['category']}] saved & dispatched.")
         
     except Exception as e:
         print(f"⚠️ Intel processing skipped: {e}")
 
 # --- TRACKER LOOPS ---
 async def master_intelligence_loop():
+    # Run the 24-hour retention database cleanup sweep first
+    database_auto_scrub()
+
     print("📰 Scraping Global Macro News Feeds...")
     for feed_url in NEWS_FEEDS:
         try:
@@ -131,7 +190,7 @@ async def master_intelligence_loop():
     try:
         transit_feed = feedparser.parse(TRANSIT_FEED)
         if transit_feed.entries:
-            for entry in reversed(transit_feed.entries[:10]): # Check latest 10 updates
+            for entry in reversed(transit_feed.entries[:10]):
                 await process_raw_report(
                     getattr(entry, 'title', ''), 
                     getattr(entry, 'description', ''), 
@@ -144,13 +203,14 @@ async def master_intelligence_loop():
 async def background_task():
     await master_intelligence_loop()
     while True:
-        await asyncio.sleep(60) # Scan every 60 seconds
+        await asyncio.sleep(60) 
         await master_intelligence_loop()
 
 # --- FASTAPI LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Booting Multi-Source AI OSINT Dashboard Server...")
+    init_db() # Run SQLite startup sequence
     asyncio.create_task(background_task())
     yield
 
