@@ -19,6 +19,8 @@
             width: 100%;
             height: 100vh;
             z-index: 1;
+            /* Change cursor to crosshair so it feels like a targeting system */
+            cursor: crosshair; 
         }
 
         /* Tactical UI Overlay */
@@ -26,12 +28,13 @@
             position: absolute;
             top: 20px;
             left: 50px;
+            width: 320px;
             background: rgba(10, 10, 10, 0.85);
             border-left: 4px solid #ff0000;
             padding: 15px 20px;
             color: #fff;
             z-index: 1000;
-            pointer-events: auto; /* Changed to auto so you can click the checkbox */
+            pointer-events: auto; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border-radius: 2px;
         }
@@ -52,6 +55,56 @@
             margin-top: 15px; 
             border-top: 1px solid #333; 
             padding-top: 12px;
+        }
+
+        /* ROUTE CALCULATOR UI */
+        .route-panel {
+            margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 12px;
+        }
+
+        .rte-input {
+            width: 90%;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 8px;
+            margin-bottom: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .rte-input:focus {
+            outline: none;
+        }
+
+        .btn-calc {
+            width: 96%;
+            background: #0055ff;
+            border: 1px solid #0096ff;
+            color: #fff;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn-calc:hover {
+            background: #0096ff;
+        }
+
+        #rte-result {
+            margin-top: 10px;
+            font-size: 12px;
+            display: none;
+            padding: 10px;
+            border-radius: 2px;
+            line-height: 1.4;
         }
 
         /* --- THE NEW TACTICAL RADAR PINS --- */
@@ -77,7 +130,6 @@
             box-shadow: 0 0 10px #0096ff;
         }
 
-        /* Animation Keyframes for the pulsing effect */
         @keyframes pulse-high {
             0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
             70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); }
@@ -90,16 +142,13 @@
             100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); }
         }
 
-        /* Custom Popup & Tooltip Styling */
         .leaflet-popup-content-wrapper {
             background: #111;
             color: #fff;
             border: 1px solid #333;
             border-radius: 4px;
         }
-        .leaflet-popup-tip {
-            background: #111;
-        }
+        .leaflet-popup-tip { background: #111; }
         .transit-tooltip {
             background: rgba(10, 10, 10, 0.9);
             border: 1px solid #444;
@@ -115,11 +164,21 @@
         <h1>Grey Lane | Paris OSINT</h1>
         <div class="status" id="status-text">Connecting to intelligence feed...</div>
         
+        <!-- TACTICAL CONTROLS -->
         <div class="control-panel">
             <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa; transition: color 0.3s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#aaa'">
                 <input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)" style="margin-right: 10px; cursor: pointer;">
                 [X] ENABLE TRANSIT GRID
             </label>
+        </div>
+
+        <!-- NEW: ROUTE SAFETY CALCULATOR -->
+        <div class="route-panel">
+            <div style="font-size: 12px; color: #888; margin-bottom: 8px; letter-spacing: 1px;">ROUTE SAFETY ENGINE</div>
+            <input type="text" id="rte-from" class="rte-input" placeholder="Origin (Click Map)" readonly style="border-color: #00d4ff;">
+            <input type="text" id="rte-to" class="rte-input" placeholder="Destination (Click Map)" readonly>
+            <button class="btn-calc" onclick="calculateRoute()">▶ RUN THREAT SCAN</button>
+            <div id="rte-result"></div>
         </div>
     </div>
 
@@ -131,7 +190,7 @@
         // 1. Initialize the Dark Map
         const map = L.map('map', {
             center: [48.8566, 2.3522], 
-            zoom: 12,
+            zoom: 13,
             zoomControl: false
         });
 
@@ -142,9 +201,8 @@
             maxZoom: 19
         }).addTo(map);
 
-        // --- NEW: TRANSIT OVERLAY DATA & LOGIC ---
-        let transitLayer = L.layerGroup(); // Holds the lines so they don't mix with news dots
-
+        // --- TRANSIT OVERLAY DATA & LOGIC ---
+        let transitLayer = L.layerGroup(); 
         const METRO_LINES = [
             {name: 'M1', color: '#F2C931', coords: [[48.872,2.284], [48.869,2.308], [48.863,2.332], [48.857,2.349], [48.848,2.396]]},
             {name: 'M4', color: '#A0006E', coords: [[48.891,2.343], [48.876,2.343], [48.858,2.349], [48.825,2.332]]},
@@ -164,58 +222,126 @@
         }
 
         function toggleTransit(isOn) {
-            if (isOn) {
-                renderTransitLines();
-                map.addLayer(transitLayer);
+            if (isOn) { renderTransitLines(); map.addLayer(transitLayer); } 
+            else { map.removeLayer(transitLayer); }
+        }
+
+        // --- ROUTE SAFETY ENGINE ---
+        let activeIncidents = []; // Stores live threat dots for math checks
+        let routeLayer = L.layerGroup().addTo(map);
+        let inputMode = 'from'; // Toggles which input gets the map click data
+        let coordFrom = null;
+        let coordTo = null;
+
+        // Map Click Listener for Targeting
+        map.on('click', function(e) {
+            const latlng = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+            if (inputMode === 'from') {
+                coordFrom = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('rte-from').value = "🎯 " + latlng;
+                
+                // Auto-switch to destination box
+                inputMode = 'to';
+                document.getElementById('rte-from').style.borderColor = '#444';
+                document.getElementById('rte-to').style.borderColor = '#00d4ff';
+            } else if (inputMode === 'to') {
+                coordTo = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('rte-to').value = "🎯 " + latlng;
+                
+                inputMode = null;
+                document.getElementById('rte-to').style.borderColor = '#444';
+            }
+        });
+
+        // Let user manually click boxes to reset mode
+        document.getElementById('rte-from').onclick = () => { inputMode = 'from'; document.getElementById('rte-from').style.borderColor = '#00d4ff'; document.getElementById('rte-to').style.borderColor = '#444'; };
+        document.getElementById('rte-to').onclick = () => { inputMode = 'to'; document.getElementById('rte-to').style.borderColor = '#00d4ff'; document.getElementById('rte-from').style.borderColor = '#444'; };
+
+        function calculateRoute() {
+            if (!coordFrom || !coordTo) {
+                alert("OSINT SYSTEM: Please click on the map twice to set an Origin and Destination.");
+                return;
+            }
+
+            routeLayer.clearLayers();
+            const resBox = document.getElementById('rte-result');
+            resBox.style.display = 'block';
+
+            // Draw primary path
+            const routeLine = L.polyline([coordFrom, coordTo], {color: '#00d4ff', weight: 3, dashArray: '8,5'}).addTo(routeLayer);
+            L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
+            L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
+
+            map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
+
+            // Math: Check if active threats are inside the route's bounding box (padded for safety radius)
+            const dangerZone = routeLine.getBounds().pad(0.015);
+            const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
+
+            if (threatsOnRoute.length === 0) {
+                resBox.style.background = 'rgba(0, 255, 0, 0.1)';
+                resBox.style.border = '1px solid #00ff00';
+                resBox.style.color = '#00ff00';
+                resBox.innerHTML = '✓ PATH CLEAR.<br>No live threats detected on trajectory.';
             } else {
-                map.removeLayer(transitLayer);
+                resBox.style.background = 'rgba(255, 0, 0, 0.1)';
+                resBox.style.border = '1px solid #ff4757';
+                resBox.style.color = '#ff4757';
+                resBox.innerHTML = `⚠ WARNING: <b>${threatsOnRoute.length} hazard(s)</b> detected intersecting path.<br><br>Alternative detour plotted.`;
+
+                // Calculate a basic safe bypass path (pushes the midpoint outward)
+                const bypassMid = [
+                    ((coordFrom[0] + coordTo[0]) / 2) + 0.01, 
+                    ((coordFrom[1] + coordTo[1]) / 2) + 0.01
+                ];
+                L.polyline([coordFrom, bypassMid, coordTo], {color: '#2ed573', weight: 4, dashArray: '5,5'})
+                  .addTo(routeLayer)
+                  .bindTooltip("RECOMMENDED DETOUR", {permanent: true, direction: "top", className: 'transit-tooltip'});
             }
         }
-        // -----------------------------------------
 
-        // 2. Connect to the Render Backend Pipe
+        // --- BACKEND WEB-SOCKET ---
         const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
         const ws = new WebSocket(wsUrl);
         const statusText = document.getElementById("status-text");
 
         ws.onopen = function() {
             statusText.innerHTML = "Backend: Live & Connected";
-            statusText.style.color = "#00ff00"; // Green
+            statusText.style.color = "#00ff00";
         };
 
         ws.onclose = function() {
             statusText.innerHTML = "Backend: Disconnected (Reconnecting...)";
-            statusText.style.color = "#ff0000"; // Red
+            statusText.style.color = "#ff0000";
         };
 
-        // 3. Listen for Intelligence Data
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
             
             if (data.event === "new_incident") {
                 const inc = data.incident;
                 
-                // Determine the tactical styling based on Gemini's severity rating
+                // Store in memory for Route Safety Engine Math
+                activeIncidents.push(inc);
+                if(activeIncidents.length > 50) activeIncidents.shift(); // Keep list fresh
+                
                 let severityClass = "severity-low"; 
                 if (inc.severity.toLowerCase() === "high") severityClass = "severity-high";
                 if (inc.severity.toLowerCase() === "medium") severityClass = "severity-medium";
 
-                // Create the custom HTML radar pin
                 const tacticalIcon = L.divIcon({
                     className: `osint-marker ${severityClass}`,
                     iconSize: [14, 14],
-                    iconAnchor: [7, 7] // Centers the dot exactly on the coordinate
+                    iconAnchor: [7, 7]
                 });
 
-                // Drop the pin on the map
                 const marker = L.marker([inc.lat, inc.lng], { icon: tacticalIcon }).addTo(map);
                 
-                // Format the popup box
                 marker.bindPopup(`
                     <div style="font-family: Courier New, monospace;">
                         <strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>
                         ${inc.description}<br><br>
-                        <span style="color: #888;">Severity Assessment: ${inc.severity.toUpperCase()}</span>
+                        <span style="color: #888;">Severity: ${inc.severity.toUpperCase()}</span>
                     </div>
                 `);
             }
