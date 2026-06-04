@@ -108,7 +108,7 @@ MICRO_FEEDS = [
 async def process_raw_report(title, description, source_type, source_name):
     clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
     
-    # Check memory cache & DB to avoid duplicates
+    # 1. Duplicate check
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM incidents WHERE description LIKE ?", (f"%{clean_text[:20]}%",))
@@ -117,7 +117,26 @@ async def process_raw_report(title, description, source_type, source_name):
     
     if exists or len(clean_text) < 10:
         return
-
+    
+    # 2. KEYWORD SHIELD: Pre-filter text to protect free tier daily limits
+    # Checks both French and English operational terms
+    security_keywords = [
+        "protest", "manifestation", "strike", "grève", "riot", "émeute", 
+        "police", "gendarmerie", "pompiers", "attack", "agression", 
+        "stolen", "vol", "cambriolage", "accident", "choc", "blessé",
+        "security", "sécurité", "suspect", "arrest", "interpellé",
+        "transit", "trafic", "métro", "metro", "rer", "bus", "tram", 
+        "fermé", "closed", "suspendu", "incident", "panne", "retard"
+    ]
+    
+    combined_lower = (title + " " + description).lower()
+    has_keyword = any(keyword in combined_lower for keyword in security_keywords)
+    
+    # If it doesn't contain an urban safety keyword, drop it instantly without using AI quota
+    if not has_keyword:
+        return
+    
+    # If it passes the shield, we safely proceed to Gemini analysis
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
 
     prompt = f"""
@@ -223,7 +242,7 @@ async def master_intelligence_loop():
 async def background_task():
     await master_intelligence_loop()
     while True:
-        await asyncio.sleep(60) 
+        await asyncio.sleep(180) # Scans every 3 minutes to optimize pipeline health
         await master_intelligence_loop()
 
 # --- FASTAPI LIFESPAN ---
