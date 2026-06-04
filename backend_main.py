@@ -99,6 +99,12 @@ def database_auto_scrub():
 NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
 TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
 
+# NEW: Hyper-Local Parisian Micro-Feeds
+MICRO_FEEDS = [
+    "https://www.leparisien.fr/paris-75/rss.xml", # Street-level Paris crime & incidents
+    "https://www.lefigaro.fr/paris/rss.xml"       # Local municipal disruptions
+]
+
 async def process_raw_report(title, description, source_type, source_name):
     clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
     
@@ -183,6 +189,20 @@ async def master_intelligence_loop():
                         getattr(entry, 'description', ''), 
                         "NEWS", 
                         "France24" if "france24" in feed_url else "RFI"
+                    )
+        except: pass
+
+    print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
+    for feed_url in MICRO_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if feed.entries:
+                for entry in reversed(feed.entries[:5]):
+                    await process_raw_report(
+                        getattr(entry, 'title', ''), 
+                        getattr(entry, 'description', ''), 
+                        "LOCAL INTEL", 
+                        "LeParisien" if "leparisien" in feed_url else "LeFigaro"
                     )
         except: pass
 
