@@ -99,12 +99,13 @@ def database_auto_scrub():
 NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
 TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
 
-# NEW: Hyper-Local Parisian Micro-Feeds
+# Hyper-Local Parisian Micro-Feeds
 MICRO_FEEDS = [
-    "https://www.leparisien.fr/paris-75/rss.xml", # Street-level Paris crime & incidents
-    "https://www.lefigaro.fr/paris/rss.xml"       # Local municipal disruptions
+    "https://www.leparisien.fr/paris-75/rss.xml", 
+    "https://www.lefigaro.fr/paris/rss.xml"       
 ]
 
+# --- CORE INTEL PROCESSING ENGINE ---
 async def process_raw_report(title, description, source_type, source_name):
     clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
     
@@ -117,9 +118,8 @@ async def process_raw_report(title, description, source_type, source_name):
     
     if exists or len(clean_text) < 10:
         return
-    
+
     # 2. KEYWORD SHIELD: Pre-filter text to protect free tier daily limits
-    # Checks both French and English operational terms
     security_keywords = [
         "protest", "manifestation", "strike", "grève", "riot", "émeute", 
         "police", "gendarmerie", "pompiers", "attack", "agression", 
@@ -132,11 +132,10 @@ async def process_raw_report(title, description, source_type, source_name):
     combined_lower = (title + " " + description).lower()
     has_keyword = any(keyword in combined_lower for keyword in security_keywords)
     
-    # If it doesn't contain an urban safety keyword, drop it instantly without using AI quota
     if not has_keyword:
         return
-    
-    # If it passes the shield, we safely proceed to Gemini analysis
+
+    # 3. AI Analysis Block
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
 
     prompt = f"""
@@ -182,7 +181,6 @@ async def process_raw_report(title, description, source_type, source_name):
             "severity": ai_data.get("severity", "medium").lower()
         }
         
-        # Persist to local database permanently
         store_incident(incident_data)
         
         payload = {"event": "new_incident", "incident": incident_data}
@@ -194,7 +192,6 @@ async def process_raw_report(title, description, source_type, source_name):
 
 # --- TRACKER LOOPS ---
 async def master_intelligence_loop():
-    # Run the 24-hour retention database cleanup sweep first
     database_auto_scrub()
 
     print("📰 Scraping Global Macro News Feeds...")
@@ -249,7 +246,7 @@ async def background_task():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Booting Multi-Source AI OSINT Dashboard Server...")
-    init_db() # Run SQLite startup sequence
+    init_db() 
     asyncio.create_task(background_task())
     yield
 
