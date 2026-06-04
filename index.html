@@ -13,7 +13,7 @@
             padding: 0;
             background-color: #000;
             font-family: 'Courier New', Courier, monospace;
-            overflow: hidden; /* Prevent page scroll */
+            overflow: hidden;
         }
 
         #map {
@@ -23,7 +23,6 @@
             cursor: crosshair; 
         }
 
-        /* --- LEFT PANEL: TACTICAL CONTROLS --- */
         .overlay-box {
             position: absolute;
             top: 20px;
@@ -90,13 +89,12 @@
             line-height: 1.4;
         }
 
-        /* --- RIGHT PANEL: LIVE INTELLIGENCE FEED --- */
         .log-panel {
             position: absolute;
             top: 20px;
             right: 20px;
             width: 320px;
-            height: calc(100vh - 40px); /* Fits screen height perfectly */
+            height: calc(100vh - 40px);
             background: rgba(10, 10, 10, 0.85);
             border-right: 4px solid #00d4ff;
             color: #fff;
@@ -127,7 +125,6 @@
             gap: 10px;
         }
 
-        /* Hacker-style custom scrollbar */
         .log-content::-webkit-scrollbar { width: 4px; }
         .log-content::-webkit-scrollbar-track { background: #000; }
         .log-content::-webkit-scrollbar-thumb { background: #444; }
@@ -159,7 +156,6 @@
             to { opacity: 1; transform: translateX(0); }
         }
 
-        /* --- THE NEW TACTICAL RADAR PINS --- */
         .osint-marker { border-radius: 50%; border: 2px solid white; }
         .severity-high { background-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 10px red; animation: pulse-high 1.2s infinite; }
         .severity-medium { background-color: rgba(255, 165, 0, 0.8); box-shadow: 0 0 10px orange; animation: pulse-medium 2s infinite; }
@@ -197,8 +193,7 @@
 
     <div class="log-panel">
         <div class="log-header">▶ LIVE INTELLIGENCE LOG</div>
-        <div class="log-content" id="log-content">
-            </div>
+        <div class="log-content" id="log-content"></div>
     </div>
 
     <div id="map"></div>
@@ -206,7 +201,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // 1. Initialize Map
         const map = L.map('map', {
             center: [48.8566, 2.3522], 
             zoom: 13,
@@ -215,7 +209,6 @@
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-        // --- TRANSIT OVERLAY LOGIC ---
         let transitLayer = L.layerGroup(); 
         const METRO_LINES = [
             {name: 'M1', color: '#F2C931', coords: [[48.872,2.284], [48.869,2.308], [48.863,2.332], [48.857,2.349], [48.848,2.396]]},
@@ -224,6 +217,8 @@
             {name: 'M13', color: '#6EC4E8', coords: [[48.916,2.329], [48.903,2.338], [48.883,2.338], [48.860,2.332], [48.818,2.296]]},
             {name: 'RER A', color: '#D00000', coords: [[48.870,2.209], [48.865,2.287], [48.858,2.350], [48.850,2.440], [48.835,2.520]]},
             {name: 'RER B', color: '#4169E1', coords: [[48.944,2.357], [48.900,2.350], [48.860,2.347], [48.810,2.321], [48.760,2.310]]},
+            {name: 'TRAM T3a', color: '#F3A412', coords: [[48.818,2.338], [48.820,2.360], [48.825,2.383], [48.828,2.405], [48.832,2.439]]},
+            {name: 'FUNICULAR', color: '#FFFFFF', coords: [[48.8837, 2.3425], [48.8845, 2.3432]]}
         ];
 
         function toggleTransit(isOn) {
@@ -234,7 +229,6 @@
             } else { map.removeLayer(transitLayer); }
         }
 
-        // --- ROUTE ENGINE ---
         let activeIncidents = []; 
         let routeLayer = L.layerGroup().addTo(map);
         let inputMode = 'from', coordFrom = null, coordTo = null;
@@ -258,32 +252,56 @@
         document.getElementById('rte-from').onclick = () => { inputMode = 'from'; document.getElementById('rte-from').style.borderColor = '#00d4ff'; document.getElementById('rte-to').style.borderColor = '#444'; };
         document.getElementById('rte-to').onclick = () => { inputMode = 'to'; document.getElementById('rte-to').style.borderColor = '#00d4ff'; document.getElementById('rte-from').style.borderColor = '#444'; };
 
-        function calculateRoute() {
-            if (!coordFrom || !coordTo) return alert("Please click on the map to set Origin and Destination.");
+        async function calculateRoute() {
+            if (!coordFrom || !coordTo) {
+                alert("OSINT SYSTEM: Please click on the map twice to set an Origin and Destination.");
+                return;
+            }
             routeLayer.clearLayers();
             const resBox = document.getElementById('rte-result');
             resBox.style.display = 'block';
-
-            const routeLine = L.polyline([coordFrom, coordTo], {color: '#00d4ff', weight: 3, dashArray: '8,5'}).addTo(routeLayer);
-            L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
-            L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
-            map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
-
-            const dangerZone = routeLine.getBounds().pad(0.015);
-            const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
-
-            if (threatsOnRoute.length === 0) {
-                resBox.style.background = 'rgba(0, 255, 0, 0.1)'; resBox.style.border = '1px solid #00ff00'; resBox.style.color = '#00ff00';
-                resBox.innerHTML = '✓ PATH CLEAR.<br>No live threats detected.';
-            } else {
-                resBox.style.background = 'rgba(255, 0, 0, 0.1)'; resBox.style.border = '1px solid #ff4757'; resBox.style.color = '#ff4757';
-                resBox.innerHTML = `⚠ WARNING: <b>${threatsOnRoute.length} hazard(s)</b> detected.<br><br>Alternative detour plotted.`;
-                const bypassMid = [((coordFrom[0] + coordTo[0]) / 2) + 0.01, ((coordFrom[1] + coordTo[1]) / 2) + 0.01];
-                L.polyline([coordFrom, bypassMid, coordTo], {color: '#2ed573', weight: 4, dashArray: '5,5'}).addTo(routeLayer).bindTooltip("DETOUR", {permanent: true, className: 'transit-tooltip'});
+            resBox.style.background = '#222';
+            resBox.style.border = '1px solid #444';
+            resBox.style.color = '#fff';
+            resBox.innerHTML = '⏳ Satellite calculating street route...';
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordFrom[1]},${coordFrom[0]};${coordTo[1]},${coordTo[0]}?overview=full&geometries=geojson`;
+            try {
+                const response = await fetch(osrmUrl);
+                const data = await response.json();
+                if (data.code !== 'Ok') {
+                    resBox.innerHTML = '❌ ROUTE FAILED: Cannot find valid street path.';
+                    return;
+                }
+                const routeGeoJSON = data.routes[0].geometry;
+                const realRouteLine = L.geoJSON(routeGeoJSON, {
+                    style: { color: '#00d4ff', weight: 4, opacity: 0.8 }
+                }).addTo(routeLayer);
+                L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
+                L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
+                map.fitBounds(realRouteLine.getBounds(), {padding: [50, 50]});
+                const dangerZone = realRouteLine.getBounds().pad(0.015);
+                const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
+                if (threatsOnRoute.length === 0) {
+                    resBox.style.background = 'rgba(0, 255, 0, 0.1)';
+                    resBox.style.border = '1px solid #00ff00';
+                    resBox.style.color = '#00ff00';
+                    resBox.innerHTML = '✓ PATH CLEAR.<br>No live threats detected on this street route.';
+                } else {
+                    resBox.style.background = 'rgba(255, 0, 0, 0.1)';
+                    resBox.style.border = '1px solid #ff4757';
+                    resBox.style.color = '#ff4757';
+                    resBox.innerHTML = `⚠ WARNING: <b>${threatsOnRoute.length} hazard(s)</b> detected intersecting your street path.`;
+                    threatsOnRoute.forEach(threat => {
+                        L.circle([threat.lat, threat.lng], {radius: 300, color: '#ff0000', fillOpacity: 0.2, weight: 1})
+                        .addTo(routeLayer)
+                        .bindTooltip("THREAT RADIUS", {permanent: false});
+                    });
+                }
+            } catch (error) {
+                resBox.innerHTML = '❌ SATELLITE OFFLINE: Routing engine unreachable.';
             }
         }
 
-        // --- BACKEND WEBSOCKET & LOG UI ---
         const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
         const ws = new WebSocket(wsUrl);
         const statusText = document.getElementById("status-text");
@@ -294,23 +312,15 @@
 
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            
             if (data.event === "new_incident") {
                 const inc = data.incident;
                 activeIncidents.push(inc);
                 if(activeIncidents.length > 50) activeIncidents.shift(); 
-                
-                // 1. Draw Map Marker
                 let sevClass = inc.severity.toLowerCase() === "high" ? "severity-high" : (inc.severity.toLowerCase() === "medium" ? "severity-medium" : "severity-low");
                 const marker = L.marker([inc.lat, inc.lng], { icon: L.divIcon({className: `osint-marker ${sevClass}`, iconSize: [14, 14], iconAnchor: [7, 7]}) }).addTo(map);
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
-
-                // 2. Add to Sidebar Log
                 const timeString = new Date().toLocaleTimeString([], { hour12: false });
-                
-                // Extract just the bold title for the sidebar so it isn't too huge
                 const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
-
                 const logEntry = document.createElement('div');
                 logEntry.className = `log-entry ${inc.severity.toLowerCase()}`;
                 logEntry.innerHTML = `
@@ -318,14 +328,10 @@
                     <strong style="color: #fff;">[ ${inc.category} ]</strong><br>
                     ${shortDesc}
                 `;
-                
-                // Click-to-Fly Feature
                 logEntry.onclick = () => {
                     map.flyTo([inc.lat, inc.lng], 16, { animate: true, duration: 1.5 });
                     marker.openPopup();
                 };
-
-                // Add to top of list, remove oldest if over 50
                 logContent.prepend(logEntry);
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
             }
