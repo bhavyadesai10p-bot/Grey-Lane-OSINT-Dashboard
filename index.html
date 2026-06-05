@@ -347,6 +347,13 @@
             <button class="btn-calc" onclick="calculateRoute()">▶ RUN THREAT SCAN</button>
             <div id="rte-result"></div>
         </div>
+
+        <div class="psec" style="border-top: 1px solid var(--border); padding-top: 20px;">
+            <div class="stitle">Data Operations</div>
+            <button class="btn" style="background: rgba(0, 210, 255, 0.1); border-color: #00d2ff; color: #00d2ff; font-weight: bold; width: 96%; padding: 10px; border: 1px solid #00d2ff; cursor: pointer; font-family: 'Courier New', Courier, monospace;" onclick="exportDailyBrief()">
+              📥 EXPORT DAILY BRIEF (.CSV)
+            </button>
+        </div>
     </div>
 
     <div class="log-panel">
@@ -663,6 +670,43 @@
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
             }
         };
+
+        // ══════════════════════════════════════════════════════════
+        // EXPORT INTELLIGENCE ENGINE
+        // ══════════════════════════════════════════════════════════
+        function exportDailyBrief() {
+            if (activeIncidents.length === 0) {
+                alert("⚠️ No active intelligence on the map to export.");
+                return;
+            }
+            // 1. Create the CSV Headers
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Category,Severity,Type,Source,Time (CET),Latitude,Longitude,Description\n";
+            // 2. Loop through every dot on the map and format it
+            activeIncidents.forEach(function(inc) {
+                // Clean the description to prevent commas from breaking the spreadsheet columns
+                let cleanDesc = inc.description.replace(/,/g, ";").replace(/\n/g, " ").replace(/<[^>]*>?/gm, ''); 
+                
+                // Convert the time to a readable format
+                let timeString = new Date().toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false});
+                
+                // Build the row
+                let row = `${inc.category},${inc.severity},${inc.type},${inc.source_type},${timeString},${inc.lat},${inc.lng},"${cleanDesc}"`;
+                csvContent += row + "\n";
+            });
+            // 3. Trigger the secure local download
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            
+            // Name the file dynamically based on today's date
+            let dateStr = new Date().toISOString().slice(0, 10);
+            link.setAttribute("download", `GreyLane_Intelligence_Brief_${dateStr}.csv`);
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     </script>
 </body>
 </html>
