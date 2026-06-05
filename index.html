@@ -184,6 +184,63 @@
             display: none !important;
         }
 
+        /* --- TACTICAL TERMINAL SCROLLBARS --- */
+        ::-webkit-scrollbar {
+            width: 6px;  /* Ultra-thin and sleek */
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a; /* Deep terminal black */
+            border-left: 1px solid #222;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333; 
+            border-radius: 0px; /* Sharp, military edges instead of rounded */
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00d2ff; /* Glows cyan when the operator hovers over it */
+            box-shadow: 0 0 8px rgba(0, 210, 255, 0.5);
+        }
+
+        /* --- INTELLIGENCE FEED CARDS --- */
+        .log-entry {
+            background: rgba(17, 17, 17, 0.9);
+            border: 1px solid #333;
+            border-right: 2px solid #333; /* The 'sharp end' right bracket */
+            margin-bottom: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        /* Hover effect: snaps the card forward slightly when inspecting */
+        .log-entry:hover {
+            transform: translateX(4px);
+            border-color: #555;
+        }
+        /* HIGH SEVERITY: Crimson Red edge with a threat gradient */
+        .log-entry.high {
+            border-left: 4px solid #ff4444;
+            background: linear-gradient(90deg, rgba(255, 68, 68, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* MEDIUM SEVERITY: Warning Amber edge */
+        .log-entry.medium {
+            border-left: 4px solid #ffaa00;
+            background: linear-gradient(90deg, rgba(255, 170, 0, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* LOW SEVERITY: Secure Green edge */
+        .log-entry.low {
+            border-left: 4px solid #00c851;
+            background: linear-gradient(90deg, rgba(0, 200, 81, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* TRANSIT & INFRASTRUCTURE: Cyan Blue edge */
+        .log-entry.transit {
+            border-left: 4px solid #00d2ff;
+            background: linear-gradient(90deg, rgba(0, 210, 255, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+
         #btn-transit-toggle {
             background: #111; 
             color: #00d2ff; 
