@@ -431,6 +431,28 @@
                     marker.addTo(map);
                 }
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
+                
+                // --- THE TACTICAL IMPACT RADIUS ---
+                marker.on('click', () => {
+                    // 1. Erase the previous impact zone if one exists
+                    if (window.activeImpactZone) {
+                        map.removeLayer(window.activeImpactZone);
+                    }
+                    
+                    // 2. Determine the color (Cyan for transit, Severity color for news/crime)
+                    let zoneColor = isTransit ? '#00d2ff' : (inc.severity.toLowerCase() === "high" ? "#ff4444" : "#ffcc00");
+                    
+                    // 3. Draw a 500-meter tactical ring
+                    window.activeImpactZone = L.circle([inc.lat, inc.lng], {
+                        radius: 500, // 500 meters
+                        color: zoneColor,
+                        weight: 2,
+                        dashArray: "5, 8", // Creates a military-style dashed border
+                        fillColor: zoneColor,
+                        fillOpacity: 0.1
+                    }).addTo(map);
+                });
+
                 const timeString = new Date().toLocaleTimeString([], { hour12: false });
                 const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
                 const logEntry = document.createElement('div');
@@ -441,8 +463,10 @@
                     ${shortDesc}
                 `;
                 logEntry.onclick = () => {
-                    map.flyTo([inc.lat, inc.lng], 16, { animate: true, duration: 1.5 });
+                    // Zoom out slightly to zoom level 15 so we can see the whole 500m radius
+                    map.flyTo([inc.lat, inc.lng], 15, { animate: true, duration: 1.5 });
                     marker.openPopup();
+                    marker.fire('click'); // This fires the impact radius we just built!
                 };
                 logContent.prepend(logEntry);
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
