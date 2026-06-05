@@ -232,11 +232,14 @@ def fetch_idfm_transit_status():
                         lon = float(coord["lon"])
                 
                 # 4. Save to your SQLite Database (skips Gemini entirely!)
-                # Note: We append '[IDFM]' to the title so you know exactly where the intel came from
-                title = f"[IDFM] {text_alert[:50]}..."
-                
-                # Use your existing database function to save the pin
-                insert_incident(title, text_alert, lat, lon, category, severity)
+                incident_data = {
+                    "lat": lat,
+                    "lng": lon,
+                    "category": category,
+                    "description": f"[IDFM] {text_alert}",
+                    "severity": severity
+                }
+                store_incident(incident_data)
                 
             return disruptions
         else:
@@ -245,7 +248,7 @@ def fetch_idfm_transit_status():
     except Exception as e:
         print(f"⚠️ IDFM Connection Error: {e}")
         return []
-
+        
 # --- TRACKER LOOPS ---
 async def master_intelligence_loop():
     database_auto_scrub()
