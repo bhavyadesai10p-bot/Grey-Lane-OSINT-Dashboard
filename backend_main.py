@@ -197,31 +197,50 @@ async def process_raw_report(title, description, source_type, source_name):
 
 # --- IDFM OFFICIAL TRANSIT API ---
 def fetch_idfm_transit_status():
-    """Queries the official Île-de-France Mobilités API for live disruptions."""
+    """Queries the official IDFM API, parses disruptions, and saves them to the database."""
     print("🚇 Polling IDFM Official Transit API...")
-    
-    # The Global Query Endpoint for Traffic Info Messages
     url = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/disruptions"
-    
-    headers = {
-        "apiKey": IDFM_API_KEY
-    }
+    headers = {"apiKey": IDFM_API_KEY}
     
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json()
             disruptions = data.get("disruptions", [])
-            print(f"✅ IDFM API Success: Sourced {len(disruptions)} active transit alerts.")
+            print(f"✅ IDFM API Success: Analyzing {len(disruptions)} active transit alerts.")
             
-            # For now, we just print the first disruption to the logs to verify the data structure
-            if disruptions:
-                 first_alert = disruptions[0].get("messages", [{"text": "No text"}])[0].get("text")
-                 print(f"🔍 Sample Intel: {first_alert}")
-                 
+            for dist in disruptions:
+                # 1. Extract the core message
+                messages = dist.get("messages", [])
+                if not messages:
+                    continue
+                text_alert = messages[0].get("text", "Transit Disruption")
+                
+                # 2. Extract severity and set category
+                severity = dist.get("severity", {}).get("name", "warning")
+                category = "TRANSIT"
+                
+                # 3. Extract Coordinates (IDFM nests these deeply in impacted_objects)
+                lat, lon = 48.8566, 2.3522 # Default to Paris center if exact station coords fail
+                impacted = dist.get("impacted_objects", [])
+                if impacted:
+                    pt_object = impacted[0].get("pt_object", {})
+                    stop_area = pt_object.get("stop_area", {})
+                    coord = stop_area.get("coord", {})
+                    if coord and "lat" in coord and "lon" in coord:
+                        lat = float(coord["lat"])
+                        lon = float(coord["lon"])
+                
+                # 4. Save to your SQLite Database (skips Gemini entirely!)
+                # Note: We append '[IDFM]' to the title so you know exactly where the intel came from
+                title = f"[IDFM] {text_alert[:50]}..."
+                
+                # Use your existing database function to save the pin
+                insert_incident(title, text_alert, lat, lon, category, severity)
+                
             return disruptions
         else:
-            print(f"⚠️ IDFM API Error: Received status code {response.status_code}")
+            print(f"⚠️ IDFM API Error: {response.status_code}")
             return []
     except Exception as e:
         print(f"⚠️ IDFM Connection Error: {e}")
