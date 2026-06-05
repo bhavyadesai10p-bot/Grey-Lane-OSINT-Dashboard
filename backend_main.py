@@ -63,12 +63,13 @@ DB_FILE = "greylane_local.db"
 
 # --- STEP 1: UPDATED FEED URLs ---
 MACRO_FEEDS = [
-    "https://www.lefigaro.fr/rss/figaro_actualite-france.xml",  # Macro French News (Strikes, Major Politics)
+    "https://www.france24.com/fr/france/rss",                    # France24 (National/Societal)
+    "https://www.lefigaro.fr/rss/figaro_actualite-france.xml",   # Le Figaro (French News)
 ]
 
 MICRO_FEEDS = [
-    "https://www.leparisien.fr/resizer/rss/paris-75.xml",       # Le Parisien (Strictly Paris 75)
-    "https://actu.fr/ile-de-france/paris_75056/rss",            # Actu Paris (Hyper-local street level)
+    "https://www.francetvinfo.fr/ile-de-france/paris/rss",       # France TV (Hyper-local Paris)
+    "https://www.leparisien.fr/arc/outboundfeeds/rss/info/paris-75/" # Le Parisien's true raw XML pipe
 ]
 
 TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
@@ -290,13 +291,17 @@ async def master_intelligence_loop():
     for feed_url in MACRO_FEEDS:
         try:
             feed = feedparser.parse(feed_url)
+            
+            # 🚨 RADAR PING: See exactly how much data is coming in!
+            print(f"📡 RADAR PING: Found {len(feed.entries)} articles at {feed_url}")
+            
             if feed.entries:
                 for entry in reversed(feed.entries[:10]):  # Top 10 articles
                     await process_raw_report(
                         getattr(entry, 'title', ''), 
                         getattr(entry, 'description', ''), 
                         "NEWS", 
-                        "Le Figaro" if "lefigaro" in feed_url else "NEWS"
+                        "France24" if "france24" in feed_url else "Le Figaro"
                     )
         except Exception as e:
             print(f"⚠️ Macro feed error: {e}")
@@ -306,6 +311,9 @@ async def master_intelligence_loop():
     for feed_url in MICRO_FEEDS:
         try:
             parsed_feed = feedparser.parse(feed_url)
+            
+            # 🚨 RADAR PING: See exactly how much data is coming in!
+            print(f"📡 RADAR PING: Found {len(parsed_feed.entries)} articles at {feed_url}")
             
             # Force the system to loop through the top 10 articles of EACH feed
             for entry in parsed_feed.entries[:10]: 
@@ -320,7 +328,7 @@ async def master_intelligence_loop():
                     headline,
                     summary,
                     "LOCAL INTEL",
-                    "LeParisien" if "leparisien" in feed_url else "ActuFR"
+                    "FranceTV" if "francetvinfo" in feed_url else "LeParisien"
                 )
             
         except Exception as e:
