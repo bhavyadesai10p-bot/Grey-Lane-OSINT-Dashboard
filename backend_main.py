@@ -220,8 +220,8 @@ def fetch_idfm_transit_status():
                 severity = dist.get("severity", {}).get("name", "warning")
                 category = "TRANSIT"
                 
-                # 3. Extract Coordinates (IDFM nests these deeply in impacted_objects)
-                lat, lon = 48.8566, 2.3522 # Default to Paris center if exact station coords fail
+                # 3. Extract Coordinates
+                lat, lon = 48.8566, 2.3522 # Default to Paris center
                 impacted = dist.get("impacted_objects", [])
                 if impacted:
                     pt_object = impacted[0].get("pt_object", {})
@@ -230,6 +230,12 @@ def fetch_idfm_transit_status():
                     if coord and "lat" in coord and "lon" in coord:
                         lat = float(coord["lat"])
                         lon = float(coord["lon"])
+                
+                # --- NEW: THE MICRO-JITTER ---
+                # If it used the default center coords, spread them out slightly!
+                if lat == 48.8566 and lon == 2.3522:
+                    lat += random.uniform(-0.01, 0.01)
+                    lon += random.uniform(-0.01, 0.01)
                 
                 # 4. Save to your SQLite Database (skips Gemini entirely!)
                 incident_data = {
