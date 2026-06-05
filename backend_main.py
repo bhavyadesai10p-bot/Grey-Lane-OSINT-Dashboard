@@ -18,7 +18,23 @@ IDFM_API_KEY = "oHymtFY3DTr0tdSr5jghmDe1Qaxhxn9X"
 
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-ai_model = genai.GenerativeModel('gemini-3.1-flash-lite')
+
+SYSTEM_INSTRUCTION = """
+You are a senior OSINT analyst for the Paris metropolitan region.
+Your primary task is to extract incident data from news and social media.
+
+GEOGRAPHIC RELEVANCE RULES:
+1. "Relevant to Paris" means the incident occurs ANYWHERE within the Île-de-France region (Department numbers 75, 77, 78, 91, 92, 93, 94, 95).
+2. You MUST include incidents in all suburbs, industrial zones, and transport hubs surrounding Paris (e.g., Saint-Denis, Nanterre, La Défense, Créteil, Roissy-CDG).
+3. Do NOT discard an article just because it doesn't mention the city center. If it happens in the suburbs, it IS relevant.
+
+OUTPUT RULES:
+- If relevant, return JSON with these exact fields: {"relevant_to_paris": true, "exact_location_found": true, "lat": <float>, "lng": <float>, "severity": "low/medium/high", "category": "PROTEST/DAMAGE/CRIME/TRANSIT/SECURITY", "description": "..."}
+- If NOT relevant to the Île-de-France region, return {"relevant_to_paris": false}
+- ALWAYS return valid JSON only. No markdown, no explanations, no extra text.
+"""
+
+ai_model = genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=SYSTEM_INSTRUCTION)
 
 class ConnectionManager:
     def __init__(self):
@@ -144,19 +160,17 @@ async def process_raw_report(title, description, source_type, source_name):
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
 
     prompt = f"""
-    Analyze this raw live update for an urban tactical operations map:
+    Analyze this incident report:
     Title: "{title}"
-    Details: "{description}"
-    Source Category: {source_type}
+    Description: "{description}"
+    Source Type: {source_type}
 
-    CRITICAL RULES:
-    1. Determine if this event marks a safety risk, strike, civil unrest, crime, or active transit disruption inside Paris or the Île-de-France region. If it's unrelated to Paris urban safety/infrastructure, set "relevant_to_paris" to false.
-    2. Extract the exact Paris street, landmark, metro line, or train station mentioned. Lookup and provide its precise latitude and longitude.
-    3. If it is an active disruption or protest relevant to Paris but no exact street/station is named, set "exact_location_found" to false and use default center coordinates (48.8566, 2.3522).
-    4. Map "category" strictly to: PROTEST, DAMAGE, CRIME, TRANSIT, or SECURITY. 
-    5. Determine "severity" strictly as: low, medium, or high.
+    Extract the precise location (latitude/longitude) if mentioned. If no exact location is named, use the Paris center default (48.8566, 2.3522) and set exact_location_found to false.
+    
+    Classify severity as: low, medium, or high.
+    Classify category as one of: PROTEST, DAMAGE, CRIME, TRANSIT, SECURITY.
 
-    Respond ONLY with this valid JSON template. No markdown wrappers, no comments, no extra text:
+    Respond ONLY with valid JSON. No markdown, no explanations:
     {{"relevant_to_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "TRANSIT"}}
     """
 
