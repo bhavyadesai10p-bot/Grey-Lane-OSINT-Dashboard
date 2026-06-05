@@ -270,22 +270,29 @@
                 isTransitVisible = true;
             }
         } 
-        const METRO_LINES = [
-            {name: 'M1', color: '#F2C931', coords: [[48.872,2.284], [48.869,2.308], [48.863,2.332], [48.857,2.349], [48.848,2.396]]},
-            {name: 'M4', color: '#A0006E', coords: [[48.891,2.343], [48.876,2.343], [48.858,2.349], [48.825,2.332]]},
-            {name: 'M6', color: '#83C491', coords: [[48.845,2.282], [48.848,2.306], [48.851,2.330], [48.851,2.400]]},
-            {name: 'M13', color: '#6EC4E8', coords: [[48.916,2.329], [48.903,2.338], [48.883,2.338], [48.860,2.332], [48.818,2.296]]},
-            {name: 'RER A', color: '#D00000', coords: [[48.870,2.209], [48.865,2.287], [48.858,2.350], [48.850,2.440], [48.835,2.520]]},
-            {name: 'RER B', color: '#4169E1', coords: [[48.944,2.357], [48.900,2.350], [48.860,2.347], [48.810,2.321], [48.760,2.310]]},
-            {name: 'TRAM T3a', color: '#F3A412', coords: [[48.818,2.338], [48.820,2.360], [48.825,2.383], [48.828,2.405], [48.832,2.439]]},
-            {name: 'FUNICULAR', color: '#FFFFFF', coords: [[48.8837, 2.3425], [48.8845, 2.3432]]}
-        ];
 
-        // Populate the transit layer with metro lines on initialization
-        METRO_LINES.forEach(l => L.polyline(l.coords, {color: l.color, weight: 4, opacity: 0.85}).addTo(transitLayer).bindTooltip(l.name, {sticky: true, className: 'transit-tooltip'}));
+        // --- 🚇 OFFICIAL PARIS RAIL NETWORK (IDFM OPEN DATA) ---
+        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/traces-du-reseau-ferre-idf/exports/geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: function (feature) {
+                        // IDFM often provides the official hex color. If missing, default to a dark tactical grey.
+                        let props = feature.properties;
+                        let rawColor = props.colourweb_hexa || props.couleur_hexa || props.route_color || '333333'; 
+                        let cleanColor = rawColor.replace('#', ''); // Ensure no double hash
+                        
+                        return {
+                            color: `#${cleanColor}`,
+                            weight: 2,
+                            opacity: 0.4 // Kept dim so your glowing blue alerts stand out on top!
+                        };
+                    }
+                }).addTo(transitLayer); // This attaches the entire grid to your [TRANSIT: ON/OFF] button!
+            })
+            .catch(error => console.error("Geospatial routing error:", error));
 
 
-    
         // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
         // Format: [Latitude, Longitude, Intensity 0.0 to 1.0]
         const parisRedZones = [
