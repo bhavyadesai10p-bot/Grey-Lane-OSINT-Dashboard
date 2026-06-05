@@ -7,6 +7,7 @@ import re
 import sqlite3
 import requests
 import time
+import urllib.request
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -68,8 +69,8 @@ MACRO_FEEDS = [
 ]
 
 MICRO_FEEDS = [
-    "https://www.francetvinfo.fr/ile-de-france/paris/rss",       # France TV (Hyper-local Paris)
-    "https://www.leparisien.fr/arc/outboundfeeds/rss/info/paris-75/" # Le Parisien's true raw XML pipe
+    "https://partner-feeds.20minutes.fr/rss/paris.xml",          # 20 Minutes Paris (Hyper-local breaking city news)
+    "https://www.francetvinfo.fr/ile-de-france/paris/rss",       # France TV (Hyper-local Paris - backup)
 ]
 
 TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
@@ -290,7 +291,13 @@ async def master_intelligence_loop():
     print("📰 Scraping Macro French News Feeds...")
     for feed_url in MACRO_FEEDS:
         try:
-            feed = feedparser.parse(feed_url)
+            # Pretend to be a Google Chrome browser to bypass blocks
+            req = urllib.request.Request(
+                feed_url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            html = urllib.request.urlopen(req).read()
+            feed = feedparser.parse(html)
             
             # 🚨 RADAR PING: See exactly how much data is coming in!
             print(f"📡 RADAR PING: Found {len(feed.entries)} articles at {feed_url}")
@@ -304,13 +311,20 @@ async def master_intelligence_loop():
                         "France24" if "france24" in feed_url else "Le Figaro"
                     )
         except Exception as e:
-            print(f"⚠️ Macro feed error: {e}")
+            print(f"❌ Error fetching {feed_url}: {e}")
+            continue
 
     # --- STEP 2: FIXED MICRO FEED SCRAPING ENGINE ---
     print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
     for feed_url in MICRO_FEEDS:
         try:
-            parsed_feed = feedparser.parse(feed_url)
+            # Pretend to be a Google Chrome browser to bypass blocks
+            req = urllib.request.Request(
+                feed_url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            html = urllib.request.urlopen(req).read()
+            parsed_feed = feedparser.parse(html)
             
             # 🚨 RADAR PING: See exactly how much data is coming in!
             print(f"📡 RADAR PING: Found {len(parsed_feed.entries)} articles at {feed_url}")
@@ -328,15 +342,26 @@ async def master_intelligence_loop():
                     headline,
                     summary,
                     "LOCAL INTEL",
-                    "FranceTV" if "francetvinfo" in feed_url else "LeParisien"
+                    "20Minutes" if "20minutes" in feed_url else "FranceTV"
                 )
             
         except Exception as e:
-            print(f"⚠️ Micro feed parse error ({feed_url}): {e}")
+            print(f"❌ Error fetching {feed_url}: {e}")
+            continue
 
     print("🚇 Scraping Local Paris Transit Disruption Streams...")
     try:
-        transit_feed = feedparser.parse(TRANSIT_FEED)
+        # Pretend to be a Google Chrome browser to bypass blocks
+        req = urllib.request.Request(
+            TRANSIT_FEED, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        html = urllib.request.urlopen(req).read()
+        transit_feed = feedparser.parse(html)
+        
+        # 🚨 RADAR PING: See exactly how much data is coming in!
+        print(f"📡 RADAR PING: Found {len(transit_feed.entries)} articles at {TRANSIT_FEED}")
+        
         if transit_feed.entries:
             for entry in reversed(transit_feed.entries[:10]):
                 await process_raw_report(
@@ -346,7 +371,7 @@ async def master_intelligence_loop():
                     "RATP Live Traffic"
                 )
     except Exception as e:
-        print(f"⚠️ Transit feed error: {e}")
+        print(f"❌ Error fetching TRANSIT_FEED: {e}")
     
     print("🔌 Querying Official IDFM Transit API...")
     fetch_idfm_transit_status()
