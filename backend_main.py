@@ -5,11 +5,16 @@ import random
 import feedparser
 import re
 import sqlite3
+import requests
+import time
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
+
+# --- OFFICIAL IDFM TRANSIT API KEY ---
+IDFM_API_KEY = "oHymtFY3DTr0tdSr5jghmDe1Qaxhxn9X"
 
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -190,6 +195,38 @@ async def process_raw_report(title, description, source_type, source_name):
     except Exception as e:
         print(f"⚠️ Intel processing skipped: {e}")
 
+# --- IDFM OFFICIAL TRANSIT API ---
+def fetch_idfm_transit_status():
+    """Queries the official Île-de-France Mobilités API for live disruptions."""
+    print("🚇 Polling IDFM Official Transit API...")
+    
+    # The Global Query Endpoint for Traffic Info Messages
+    url = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/disruptions"
+    
+    headers = {
+        "apiKey": IDFM_API_KEY
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            disruptions = data.get("disruptions", [])
+            print(f"✅ IDFM API Success: Sourced {len(disruptions)} active transit alerts.")
+            
+            # For now, we just print the first disruption to the logs to verify the data structure
+            if disruptions:
+                 first_alert = disruptions[0].get("messages", [{"text": "No text"}])[0].get("text")
+                 print(f"🔍 Sample Intel: {first_alert}")
+                 
+            return disruptions
+        else:
+            print(f"⚠️ IDFM API Error: Received status code {response.status_code}")
+            return []
+    except Exception as e:
+        print(f"⚠️ IDFM Connection Error: {e}")
+        return []
+
 # --- TRACKER LOOPS ---
 async def master_intelligence_loop():
     database_auto_scrub()
@@ -234,6 +271,10 @@ async def master_intelligence_loop():
                     "RATP Live Traffic"
                 )
     except: pass
+    
+    print("🔌 Querying Official IDFM Transit API...")
+    fetch_idfm_transit_status()
+    
     print("✅ System Core Scrapers Synchronized.")
 
 async def background_task():
