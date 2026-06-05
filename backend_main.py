@@ -162,13 +162,21 @@ async def process_raw_report(title, description, source_type, source_name):
 
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
+        
+        # 🕵️ DIAGNOSTIC: Print exactly what Gemini returned
+        print(f"🕵️ GEMINI RAW OUTPUT:\n{response.text}\n---")
+        
         raw_json = response.text.strip()
         if "{" in raw_json: 
             raw_json = raw_json[raw_json.find("{"):raw_json.rfind("}")+1]
         
+        print(f"🕵️ EXTRACTED JSON: {raw_json}")
+        
         ai_data = json.loads(raw_json)
+        print(f"🕵️ PARSED JSON SUCCESS: {ai_data}")
         
         if not ai_data.get("relevant_to_paris", False):
+            print(f"⏭️ Skipped: Not relevant to Paris")
             return
             
         lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
@@ -192,8 +200,11 @@ async def process_raw_report(title, description, source_type, source_name):
         await manager.broadcast(payload)
         print(f"📍 REAL-TIME AI DROP: [{incident_data['category']}] saved & dispatched.")
         
+    except json.JSONDecodeError as je:
+        print(f"❌ JSON PARSE FAILED: {je}")
+        print(f"   Raw text was: {response.text[:200]}")
     except Exception as e:
-        print(f"⚠️ Intel processing skipped: {e}")
+        print(f"⚠️ Intel processing skipped: {type(e).__name__}: {e}")
 
 # --- IDFM OFFICIAL TRANSIT API ---
 def fetch_idfm_transit_status():
