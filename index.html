@@ -167,6 +167,22 @@
         .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid #333; }
         .leaflet-popup-tip { background: #111; }
         .transit-tooltip { background: rgba(10, 10, 10, 0.9); border: 1px solid #444; color: #fff; font-family: monospace; font-weight: bold; }
+        
+        /* --- TACTICAL STATION TOOLTIPS --- */
+        .tactical-station-tooltip {
+            background-color: #111 !important;
+            color: #00d2ff !important;
+            border: 1px solid #00d2ff !important;
+            font-family: monospace !important;
+            font-size: 10px !important;
+            border-radius: 2px !important;
+            box-shadow: 0 0 5px rgba(0, 210, 255, 0.3) !important;
+            padding: 4px 6px !important;
+        }
+        /* Hide the little triangle arrow Leaflet puts on tooltips */
+        .leaflet-tooltip-top.tactical-station-tooltip::before {
+            display: none !important;
+        }
 
         #btn-transit-toggle {
             background: #111; 
@@ -291,6 +307,36 @@
                 }).addTo(transitLayer); // This attaches the entire grid to your [TRANSIT: ON/OFF] button!
             })
             .catch(error => console.error("Geospatial routing error:", error));
+
+        // --- 🚉 OFFICIAL PARIS STATIONS (IDFM OPEN DATA) ---
+        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/gares-et-stations-du-reseau-ferre-d-ile-de-france/exports/geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    // pointToLayer tells Leaflet how to draw point data (stations)
+                    pointToLayer: function (feature, latlng) {
+                        return L.circleMarker(latlng, {
+                            radius: 2.5, // Tiny, sleek station node
+                            fillColor: "#ffffff", // Bright white center
+                            color: "#000000",     // Dark border
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        });
+                    },
+                    // onEachFeature attaches the name tooltip to every single station
+                    onEachFeature: function (feature, layer) {
+                        // IDFM stores the name in 'nom_long' or 'nom_gare'
+                        let stationName = feature.properties.nom_long || feature.properties.nom_gare || "Station";
+                        layer.bindTooltip(`[ ${stationName} ]`, {
+                            direction: 'top',
+                            className: 'tactical-station-tooltip',
+                            opacity: 0.9
+                        });
+                    }
+                }).addTo(transitLayer); // Attaches to your Master Switch!
+            })
+            .catch(error => console.error("Station loading error:", error));
 
 
         // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
