@@ -352,7 +352,26 @@
                 activeIncidents.push(inc);
                 if(activeIncidents.length > 50) activeIncidents.shift(); 
                 let sevClass = inc.severity.toLowerCase() === "high" ? "severity-high" : (inc.severity.toLowerCase() === "medium" ? "severity-medium" : "severity-low");
-                const marker = L.marker([inc.lat, inc.lng], { icon: L.divIcon({className: `osint-marker ${sevClass}`, iconSize: [14, 14], iconAnchor: [7, 7]}) }).addTo(map);
+                // --- CUSTOM TACTICAL STYLING ENGINE ---
+                let customClass = `osint-marker ${sevClass}`;
+                let mSize = 14;
+                let customHtml = '';
+
+                // If this is an official French government transit alert, make it a high-visibility warning!
+                if (inc.category === 'TRANSIT') {
+                    mSize = 18; // Larger footprint for transit
+                    // Draws a bright yellow warning circle inside the custom div
+                    customHtml = '<div style="width: 100%; height: 100%; background-color: #ffcc00; border: 2px solid #000; border-radius: 50%; box-shadow: 0 0 10px #ffcc00;"></div>';
+                }
+
+                const marker = L.marker([inc.lat, inc.lng], { 
+                    icon: L.divIcon({
+                        className: customClass, 
+                        html: customHtml,
+                        iconSize: [mSize, mSize], 
+                        iconAnchor: [mSize/2, mSize/2]
+                    }) 
+                }).addTo(map);
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
                 const timeString = new Date().toLocaleTimeString([], { hour12: false });
                 const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
