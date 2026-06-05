@@ -61,6 +61,18 @@ manager = ConnectionManager()
 PARIS_CENTER_LAT, PARIS_CENTER_LNG = 48.8566, 2.3522
 DB_FILE = "greylane_local.db"
 
+# --- STEP 1: UPDATED FEED URLs ---
+MACRO_FEEDS = [
+    "https://www.lefigaro.fr/rss/figaro_actualite-france.xml",  # Macro French News (Strikes, Major Politics)
+]
+
+MICRO_FEEDS = [
+    "https://www.leparisien.fr/resizer/rss/paris-75.xml",       # Le Parisien (Strictly Paris 75)
+    "https://actu.fr/ile-de-france/paris_75056/rss",            # Actu Paris (Hyper-local street level)
+]
+
+TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
+
 # --- SYSTEM 1: AUTOMATIC LIFETIME-FREE SQLITE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -115,16 +127,6 @@ def database_auto_scrub():
     conn.close()
     if deleted_count > 0:
         print(f"🧹 DATABASE AUTO-SCRUB: Cleared {deleted_count} expired threat profiles (>24h).")
-
-# --- DATA SOURCE FEEDS ---
-NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
-TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
-
-# Hyper-Local Parisian Micro-Feeds
-MICRO_FEEDS = [
-    "https://www.leparisien.fr/paris-75/rss.xml", 
-    "https://www.lefigaro.fr/paris/rss.xml"       
-]
 
 # --- CORE INTEL PROCESSING ENGINE ---
 async def process_raw_report(title, description, source_type, source_name):
@@ -279,38 +281,50 @@ def fetch_idfm_transit_status():
     except Exception as e:
         print(f"⚠️ IDFM Connection Error: {e}")
         return []
-        
+
 # --- TRACKER LOOPS ---
 async def master_intelligence_loop():
     database_auto_scrub()
 
-    print("📰 Scraping Global Macro News Feeds...")
-    for feed_url in NEWS_FEEDS:
+    print("📰 Scraping Macro French News Feeds...")
+    for feed_url in MACRO_FEEDS:
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
-                for entry in reversed(feed.entries[:5]):
+                for entry in reversed(feed.entries[:10]):  # Top 10 articles
                     await process_raw_report(
                         getattr(entry, 'title', ''), 
                         getattr(entry, 'description', ''), 
                         "NEWS", 
-                        "France24" if "france24" in feed_url else "RFI"
+                        "Le Figaro" if "lefigaro" in feed_url else "NEWS"
                     )
-        except: pass
+        except Exception as e:
+            print(f"⚠️ Macro feed error: {e}")
 
+    # --- STEP 2: FIXED MICRO FEED SCRAPING ENGINE ---
     print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
     for feed_url in MICRO_FEEDS:
         try:
-            feed = feedparser.parse(feed_url)
-            if feed.entries:
-                for entry in reversed(feed.entries[:5]):
-                    await process_raw_report(
-                        getattr(entry, 'title', ''), 
-                        getattr(entry, 'description', ''), 
-                        "LOCAL INTEL", 
-                        "LeParisien" if "leparisien" in feed_url else "LeFigaro"
-                    )
-        except: pass
+            parsed_feed = feedparser.parse(feed_url)
+            
+            # Force the system to loop through the top 10 articles of EACH feed
+            for entry in parsed_feed.entries[:10]: 
+                headline = entry.get('title', '')
+                summary = entry.get('summary', '')
+                full_text = f"{headline} - {summary}"
+                
+                print(f"🧠 AI Analyzing LOCAL INTEL: {headline[:50]}...")
+                
+                # Send to process_raw_report (existing AI function)
+                await process_raw_report(
+                    headline,
+                    summary,
+                    "LOCAL INTEL",
+                    "LeParisien" if "leparisien" in feed_url else "ActuFR"
+                )
+            
+        except Exception as e:
+            print(f"⚠️ Micro feed parse error ({feed_url}): {e}")
 
     print("🚇 Scraping Local Paris Transit Disruption Streams...")
     try:
@@ -323,7 +337,8 @@ async def master_intelligence_loop():
                     "TRANSIT", 
                     "RATP Live Traffic"
                 )
-    except: pass
+    except Exception as e:
+        print(f"⚠️ Transit feed error: {e}")
     
     print("🔌 Querying Official IDFM Transit API...")
     fetch_idfm_transit_status()
