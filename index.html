@@ -6,6 +6,8 @@
     <title>Grey Lane | Live Paris OSINT</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
     
     <style>
         body {
@@ -265,9 +267,62 @@
             color: #000;
             box-shadow: 0 0 15px #00d2ff;
         }
+
+        /* --- COMMAND HEADER STYLING --- */
+        #top-header {
+            position: fixed; top: 0; left: 0; right: 0; height: 55px;
+            background: #0f1218; border-bottom: 1px solid #222d3d;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; z-index: 2000; box-sizing: border-box;
+        }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        
+        /* The Pulsing Live Dot */
+        #live-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #00c851;
+            box-shadow: 0 0 8px #00c851; animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px #00c851; } 50% { opacity: 0.4; box-shadow: 0 0 2px #00c851; } }
+        
+        /* Stats Block */
+        #header-stats { display: flex; align-items: center; gap: 20px; }
+        .stat-box { display: flex; flex-direction: column; align-items: center; }
+        .stat-val { font-family: monospace; font-size: 18px; color: #ddeeff; font-weight: bold; line-height: 1; }
+        .stat-lbl { font-family: monospace; font-size: 9px; color: #8899aa; letter-spacing: 1.5px; margin-top: 2px; }
+        .stat-line { width: 1px; height: 25px; background: #222d3d; }
+        
+        #header-clock { font-family: monospace; font-size: 13px; color: #00d2ff; letter-spacing: 1px; }
+        /* Push existing map and sidebar down so they don't hide behind the header */
+        #map, #sidebar { top: 55px !important; height: calc(100vh - 55px) !important; }
+        /* --- TACTICAL CLUSTER OVERRIDES --- */
+        .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(0,0,0,0.6) !important; }
+        .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+            background: #151a22 !important; color: #00d2ff !important;
+            font-family: monospace !important; font-size: 12px !important; font-weight: bold;
+            border: 1px solid #00d2ff !important; box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+        }
     </style>
 </head>
 <body>
+
+    <div id="top-header">
+        <div class="header-left">
+            <div id="live-dot"></div>
+            <div id="logo-block">
+                <span style="color: #8899aa; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">GREY</span> 
+                <span style="color: #00d2ff; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">LANE</span>
+                <div style="font-family: monospace; font-size: 9px; color: #555; letter-spacing: 3px; margin-top: -4px;">PARIS OSINT</div>
+            </div>
+        </div>
+        <div id="header-stats">
+            <div class="stat-box"><div class="stat-val" id="stat-active">0</div><div class="stat-lbl">ACTIVE</div></div>
+            <div class="stat-line"></div>
+            <div class="stat-box"><div class="stat-val" style="color: #ff4444;" id="stat-crit">0</div><div class="stat-lbl">CRITICAL</div></div>
+            <div class="stat-line"></div>
+            <div class="stat-box"><div class="stat-val" id="stat-transit-cnt">0</div><div class="stat-lbl">TRANSIT</div></div>
+        </div>
+        <div id="header-clock">--:--:-- CET</div>
+    </div>
 
     <div class="overlay-box">
         <h1>Grey Lane | Paris OSINT</h1>
@@ -309,6 +364,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     
     <script>
         const map = L.map('map', {
@@ -318,6 +374,20 @@
         });
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+        // --- LIVE CLOCK ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('header-clock').innerText = now.toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false}) + ' CET';
+        }, 1000);
+        // --- TACTICAL CLUSTER GROUP ---
+        const masterCluster = L.markerClusterGroup({
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true
+        });
+        map.addLayer(masterCluster);
 
         // --- TACTICAL DATA LAYERS ---
         const transitLayer = L.layerGroup().addTo(map);
@@ -536,9 +606,9 @@
                 });
                 // Assign to the correct layer!
                 if (isTransit) {
-                    marker.addTo(transitLayer);
+                    marker.addTo(masterCluster);
                 } else {
-                    marker.addTo(map);
+                    marker.addTo(masterCluster);
                 }
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
                 
