@@ -175,12 +175,17 @@
         <h1>Grey Lane | Paris OSINT</h1>
         <div class="status" id="status-text">Connecting to intelligence feed...</div>
         
-        <div class="control-panel">
-            <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa;">
-                <input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)" style="margin-right: 10px;">
-                [X] ENABLE TRANSIT GRID
-            </label>
-        </div>
+<div class="control-panel">
+    <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa; margin-bottom: 5px;">
+        <input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)" style="margin-right: 10px;">
+        [X] ENABLE TRANSIT GRID
+    </label>
+    <!-- NEW HEATMAP TOGGLE -->
+    <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #ff4444;">
+        <input type="checkbox" id="tog-heatmap" onchange="toggleHeatmap(this.checked)" style="margin-right: 10px;">
+        [X] SHOW CHRONIC THREAT ZONES
+    </label>
+</div>
 
         <div class="route-panel">
             <div style="font-size: 12px; color: #888; margin-bottom: 8px;">ROUTE SAFETY ENGINE</div>
@@ -199,6 +204,7 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     
     <script>
         const map = L.map('map', {
@@ -227,6 +233,35 @@
                 METRO_LINES.forEach(l => L.polyline(l.coords, {color: l.color, weight: 4, opacity: 0.85}).addTo(transitLayer).bindTooltip(l.name, {sticky: true, className: 'transit-tooltip'}));
                 map.addLayer(transitLayer);
             } else { map.removeLayer(transitLayer); }
+        }
+    
+        // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
+        // Format: [Latitude, Longitude, Intensity 0.0 to 1.0]
+        const parisRedZones = [
+            [48.8809, 2.3553, 1.0], // Gare du Nord (Aggressive pickpocketing)
+            [48.8867, 2.3431, 0.9], // Sacré-Cœur/Montmartre (String bracelet scam, pickpockets)
+            [48.8584, 2.2945, 0.85], // Eiffel Tower Base (Distraction theft)
+            [48.8606, 2.3376, 0.8], // Louvre Museum entry points (Professional rings)
+            [48.8625, 2.3475, 0.75], // Châtelet-Les Halles underground (Muggings, transit theft)
+            [48.8708, 2.3051, 0.7], // Champs-Élysées (Luxury theft, distraction)
+            [48.8768, 2.3592, 0.65], // Gare de l'Est (Luggage theft)
+            [48.8529, 2.3500, 0.6]  // Notre Dame area (Tourist distraction)
+        ];
+
+        // Create the heat layer with tactical visual settings
+        const threatHeatLayer = L.heatLayer(parisRedZones, {
+            radius: 35,
+            blur: 25,
+            maxZoom: 15,
+            gradient: {0.4: '#ffed4a', 0.65: '#fa8231', 1.0: '#eb3b5a'} // Tactical Yellow -> Orange -> Red
+        });
+
+        function toggleHeatmap(isOn) {
+            if (isOn) {
+                map.addLayer(threatHeatLayer);
+            } else {
+                map.removeLayer(threatHeatLayer);
+            }
         }
 
         let activeIncidents = []; 
