@@ -582,6 +582,17 @@
                 const inc = data.incident;
                 activeIncidents.push(inc);
                 if(activeIncidents.length > 50) activeIncidents.shift(); 
+                // --- LIVE HEADER STATS ENGINE ---
+                // 1. Update total active incidents
+                document.getElementById('stat-active').innerText = activeIncidents.length;
+                
+                // 2. Count and update Critical (High Severity) incidents
+                let critCount = activeIncidents.filter(item => (item.severity || '').toLowerCase() === 'high').length;
+                document.getElementById('stat-crit').innerText = critCount;
+                
+                // 3. Count and update Transit disruptions
+                let transitCount = activeIncidents.filter(item => item.category === 'TRANSIT').length;
+                document.getElementById('stat-transit-cnt').innerText = transitCount;
                 let sevClass = inc.severity.toLowerCase() === "high" ? "severity-high" : (inc.severity.toLowerCase() === "medium" ? "severity-medium" : "severity-low");
                 // --- CUSTOM TACTICAL STYLING ENGINE ---
                 let customClass = `osint-marker ${sevClass}`;
