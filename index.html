@@ -167,6 +167,31 @@
         .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid #333; }
         .leaflet-popup-tip { background: #111; }
         .transit-tooltip { background: rgba(10, 10, 10, 0.9); border: 1px solid #444; color: #fff; font-family: monospace; font-weight: bold; }
+
+        #btn-transit-toggle {
+            background: #111; 
+            color: #00d2ff; 
+            border: 1px solid #00d2ff; 
+            padding: 6px 12px; 
+            font-family: monospace; 
+            font-size: 12px; 
+            cursor: pointer; 
+            border-radius: 3px; 
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+        }
+
+        #btn-transit-toggle:hover {
+            background: #00d2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00d2ff;
+        }
+
+        #btn-transit-toggle.active {
+            background: #00d2ff;
+            color: #000;
+            box-shadow: 0 0 15px #00d2ff;
+        }
     </style>
 </head>
 <body>
@@ -177,7 +202,7 @@
         
 <div class="control-panel">
     <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa; margin-bottom: 5px;">
-        <input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)" style="margin-right: 10px;">
+        <input type="checkbox" id="tog-transit" onchange="toggleTransit()" checked style="margin-right: 10px;">
         [X] ENABLE TRANSIT GRID
     </label>
     <!-- NEW HEATMAP TOGGLE -->
@@ -203,6 +228,12 @@
 
     <div id="map"></div>
 
+    <div style="position: absolute; top: 20px; left: 370px; z-index: 1000;">
+        <button id="btn-transit-toggle" onclick="toggleTransit()" class="active">
+            [ TRANSIT: ON ]
+        </button>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     
@@ -215,7 +246,30 @@
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-        let transitLayer = L.layerGroup(); 
+        // --- TACTICAL DATA LAYERS ---
+        const transitLayer = L.layerGroup().addTo(map);
+        let isTransitVisible = true;
+
+        // The Master Switch Function
+        function toggleTransit() {
+            const btn = document.getElementById('btn-transit-toggle');
+            const checkbox = document.getElementById('tog-transit');
+            if (isTransitVisible) {
+                map.removeLayer(transitLayer);
+                btn.style.color = "#555";
+                btn.style.borderColor = "#555";
+                btn.innerText = "[ TRANSIT: OFF ]";
+                checkbox.checked = false;
+                isTransitVisible = false;
+            } else {
+                map.addLayer(transitLayer);
+                btn.style.color = "#00d2ff";
+                btn.style.borderColor = "#00d2ff";
+                btn.innerText = "[ TRANSIT: ON ]";
+                checkbox.checked = true;
+                isTransitVisible = true;
+            }
+        } 
         const METRO_LINES = [
             {name: 'M1', color: '#F2C931', coords: [[48.872,2.284], [48.869,2.308], [48.863,2.332], [48.857,2.349], [48.848,2.396]]},
             {name: 'M4', color: '#A0006E', coords: [[48.891,2.343], [48.876,2.343], [48.858,2.349], [48.825,2.332]]},
@@ -227,13 +281,10 @@
             {name: 'FUNICULAR', color: '#FFFFFF', coords: [[48.8837, 2.3425], [48.8845, 2.3432]]}
         ];
 
-        function toggleTransit(isOn) {
-            if (isOn) {
-                transitLayer.clearLayers(); 
-                METRO_LINES.forEach(l => L.polyline(l.coords, {color: l.color, weight: 4, opacity: 0.85}).addTo(transitLayer).bindTooltip(l.name, {sticky: true, className: 'transit-tooltip'}));
-                map.addLayer(transitLayer);
-            } else { map.removeLayer(transitLayer); }
-        }
+        // Populate the transit layer with metro lines on initialization
+        METRO_LINES.forEach(l => L.polyline(l.coords, {color: l.color, weight: 4, opacity: 0.85}).addTo(transitLayer).bindTooltip(l.name, {sticky: true, className: 'transit-tooltip'}));
+
+
     
         // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
         // Format: [Latitude, Longitude, Intensity 0.0 to 1.0]
@@ -356,14 +407,15 @@
                 let customClass = `osint-marker ${sevClass}`;
                 let mSize = 14;
                 let customHtml = '';
-
-                // If this is an official French government transit alert, make it a high-visibility warning!
+                let isTransit = false;
+                // Sleek, Mock-Style Transit Dots (No yellow blobs)
                 if (inc.category === 'TRANSIT') {
-                    mSize = 18; // Larger footprint for transit
-                    // Draws a bright yellow warning circle inside the custom div
-                    customHtml = '<div style="width: 100%; height: 100%; background-color: #ffcc00; border: 2px solid #000; border-radius: 50%; box-shadow: 0 0 10px #ffcc00;"></div>';
+                    isTransit = true;
+                    mSize = 12; // Sleek and sharp footprint
+                    // A clean, glowing cyan ring, like a radar blip for infrastructure
+                    customHtml = '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>';
                 }
-
+                // Create the marker
                 const marker = L.marker([inc.lat, inc.lng], { 
                     icon: L.divIcon({
                         className: customClass, 
@@ -371,7 +423,13 @@
                         iconSize: [mSize, mSize], 
                         iconAnchor: [mSize/2, mSize/2]
                     }) 
-                }).addTo(map);
+                });
+                // Assign to the correct layer!
+                if (isTransit) {
+                    marker.addTo(transitLayer);
+                } else {
+                    marker.addTo(map);
+                }
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
                 const timeString = new Date().toLocaleTimeString([], { hour12: false });
                 const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
