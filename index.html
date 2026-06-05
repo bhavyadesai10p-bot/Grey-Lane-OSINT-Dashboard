@@ -349,6 +349,15 @@
         </div>
 
         <div class="psec" style="border-top: 1px solid var(--border); padding-top: 20px;">
+            <div class="stitle">Route Safety Scanner</div>
+            <div style="font-family: monospace; font-size: 10px; color: #8899aa; margin-bottom: 10px;">
+              INSTRUCTIONS: Click any two points on the map to draw a travel vector and scan for Active Risk Zones.
+            </div>
+            <div id="route-status" style="margin-top: 5px; font-family: monospace; font-size: 11px;">
+              </div>
+          </div>
+
+        <div class="psec" style="border-top: 1px solid var(--border); padding-top: 20px;">
             <div class="stitle">Data Operations</div>
             <button class="btn" style="background: rgba(0, 210, 255, 0.1); border-color: #00d2ff; color: #00d2ff; font-weight: bold; width: 96%; padding: 10px; border: 1px solid #00d2ff; cursor: pointer; font-family: 'Courier New', Courier, monospace;" onclick="exportDailyBrief()">
               📥 EXPORT DAILY BRIEF (.CSV)
@@ -670,6 +679,58 @@
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
             }
         };
+
+        // ══════════════════════════════════════════════════════════
+        // ROUTE SAFETY & ACTIVE RISK ZONE SCANNER
+        // ══════════════════════════════════════════════════════════
+        let routePoints = [];
+        // Listen for clicks on the map to draw the route
+        map.on('click', function(e) {
+            // If there are already 2 points, clear the map for a new route
+            if (routePoints.length >= 2) {
+                routePoints = []; 
+                routeLayer.clearLayers();
+                document.getElementById('route-status').innerHTML = '';
+            }
+            
+            // Save the clicked coordinate
+            routePoints.push([e.latlng.lat, e.latlng.lng]);
+            
+            // Draw a tactical marker (Green for Start, Red for Destination)
+            L.circleMarker([e.latlng.lat, e.latlng.lng], {
+                radius: 6, 
+                color: routePoints.length === 1 ? '#00c851' : '#ff4444', 
+                fillColor: routePoints.length === 1 ? '#00c851' : '#ff4444', 
+                fillOpacity: 0.8
+            }).addTo(routeLayer);
+            // If we have both points, trigger the scan!
+            if (routePoints.length === 2) {
+                scanRoute();
+            }
+        });
+        function scanRoute() {
+            // 1. Draw the proposed travel path
+            const routeLine = L.polyline(routePoints, {
+                color: '#ffaa00', 
+                weight: 3, 
+                dashArray: '5, 8'
+            }).addTo(routeLayer);
+            
+            // 2. Create a "Blast Radius" bounding box around the path
+            const scanZone = routeLine.getBounds().pad(0.015); // Adds a geographic buffer around the line
+            
+            // 3. Filter your live feed to see if any dots fall inside the scan zone
+            const threats = activeIncidents.filter(inc => scanZone.contains([inc.lat, inc.lng]));
+            
+            // 4. Report the findings to the UI
+            const statusDiv = document.getElementById('route-status');
+            
+            if (threats.length === 0) {
+                statusDiv.innerHTML = '<div style="color: #00c851; padding: 10px; border: 1px solid #00c851; background: rgba(0,200,81,0.1); border-radius: 3px;">✓ PATH CLEAR.<br>No Active Risk Zones detected on this vector.</div>';
+            } else {
+                statusDiv.innerHTML = `<div style="color: #ff4444; padding: 10px; border: 1px solid #ff4444; background: rgba(255,68,68,0.1); border-radius: 3px;">⚠️ WARNING: <b>${threats.length} Active Risk Zones</b> detected near this path. Proceed with extreme caution.</div>`;
+            }
+        }
 
         // ══════════════════════════════════════════════════════════
         // EXPORT INTELLIGENCE ENGINE
