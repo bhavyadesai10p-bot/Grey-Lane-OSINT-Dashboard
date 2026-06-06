@@ -141,7 +141,97 @@ MICRO_FEEDS = [
     "https://www.lefigaro.fr/paris/rss.xml"       
 ]
 
-# --- CORE INTEL PROCESSING ENGINE ---
+# --- FIX B: BATCH PROCESSING ---
+async def analyze_articles_batch(articles, source_type, source_name):
+    """
+    Professional batch processing: Send 5-10 articles to Gemini in ONE call.
+    Returns array of incidents instead of 1 at a time.
+    Reduces API calls from 10 per cycle to 1 per cycle per feed!
+    """
+    if not articles:
+        return []
+    
+    # Create article block for Gemini
+    articles_block = ""
+    for i, article in enumerate(articles):
+        articles_block += f"""
+ID: {i}
+Title: {article['title']}
+Summary: {article['summary'][:200]}
+---"""
+    
+    prompt = f"""
+Analyze this batch of {len(articles)} articles for incidents in the Paris/Île-de-France region.
+Return a JSON array of objects with ONLY the relevant articles.
+
+Articles:
+{articles_block}
+
+For each relevant article, respond with:
+{{"id": 0, "relevant_to_paris": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "TRANSIT"}}
+
+Return ONLY a JSON array, no markdown. If no articles are relevant, return [].
+Example:
+[{{"id": 1, "relevant_to_paris": true, "lat": 48.9356, "lng": 2.3539, "severity": "high", "category": "PROTEST"}}]
+"""
+    
+    try:
+        print(f"🚀 Batch analyzing {len(articles)} articles from {source_name}...")
+        response = await asyncio.to_thread(ai_model.generate_content, prompt)
+        
+        print(f"🕵️ BATCH GEMINI RAW OUTPUT:\n{response.text}\n---")
+        
+        raw_json = response.text.strip()
+        if "[" in raw_json:
+            raw_json = raw_json[raw_json.find("["):raw_json.rfind("]")+1]
+        
+        print(f"🕵️ EXTRACTED BATCH JSON: {raw_json}")
+        
+        batch_results = json.loads(raw_json)
+        if not isinstance(batch_results, list):
+            batch_results = [batch_results]
+        
+        print(f"🕵️ PARSED BATCH SUCCESS: {len(batch_results)} relevant articles")
+        
+        # Process each result
+        incidents = []
+        for result in batch_results:
+            if not result.get("relevant_to_paris", False):
+                continue
+            
+            article_id = result.get("id", 0)
+            if article_id >= len(articles):
+                continue
+            
+            article = articles[article_id]
+            lat = float(result.get("lat", PARIS_CENTER_LAT))
+            lng = float(result.get("lng", PARIS_CENTER_LNG))
+            
+            incident_data = {
+                "lat": lat,
+                "lng": lng,
+                "category": result.get("category", "SECURITY").upper(),
+                "description": f"<b>📰 {source_type} BATCH: {article['title']}</b><br><br>{article['summary'][:160]}...<br><br>Source: {source_name}",
+                "severity": result.get("severity", "medium").lower()
+            }
+            
+            store_incident(incident_data)
+            incidents.append(incident_data)
+            
+            payload = {"event": "new_incident", "incident": incident_data}
+            await manager.broadcast(payload)
+            print(f"📍 BATCH AI DROP: [{incident_data['category']}] saved & dispatched.")
+        
+        return incidents
+        
+    except json.JSONDecodeError as je:
+        print(f"❌ BATCH JSON PARSE FAILED: {je}")
+        print(f"   Raw text was: {response.text[:200]}")
+        return []
+    except Exception as e:
+        print(f"⚠️ Batch processing failed: {type(e).__name__}: {e}")
+        return []
+
 async def process_raw_report(title, description, source_type, source_name):
     clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
     
@@ -433,13 +523,20 @@ async def scrape_transit_data():
 async def scrape_intelligence_feeds():
     """
     Fetches and analyzes macro news and hyper-local Paris intel.
-    Uses AI to classify incidents and push them to the map.
+    
+    TWO MODES:
+    - Fix A (Current): Individual articles with 2-second delays
+    - Fix B (Commented): Batch processing for 10x fewer API calls
+    
+    To upgrade to Fix B batch mode, uncomment the batch section below.
     """
+    
     print("📰 Scraping Macro French News Feeds...")
     for feed_url in NEWS_FEEDS:
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
+                # --- FIX A MODE (CURRENT) ---
                 for entry in reversed(feed.entries[:5]):
                     await process_raw_report(
                         getattr(entry, 'title', ''), 
@@ -447,6 +544,21 @@ async def scrape_intelligence_feeds():
                         "NEWS", 
                         "France24" if "france24" in feed_url else "RFI"
                     )
+                    # 🚨 FIX A: 2-second breathing room to prevent 429 rate limit errors
+                    await asyncio.sleep(2)
+                
+                # --- FIX B MODE (UPGRADE - uncomment to enable) ---
+                # Collect articles for batch processing
+                # articles = []
+                # for entry in reversed(feed.entries[:5]):
+                #     articles.append({
+                #         "title": getattr(entry, 'title', ''),
+                #         "summary": getattr(entry, 'description', '')
+                #     })
+                # source_name = "France24" if "france24" in feed_url else "RFI"
+                # await analyze_articles_batch(articles, "NEWS", source_name)
+                # await asyncio.sleep(2)  # Still wait between batch calls
+                
         except Exception as e:
             print(f"⚠️ Macro feed error: {e}")
 
@@ -455,6 +567,7 @@ async def scrape_intelligence_feeds():
         try:
             feed = feedparser.parse(feed_url)
             if feed.entries:
+                # --- FIX A MODE (CURRENT) ---
                 for entry in reversed(feed.entries[:5]):
                     await process_raw_report(
                         getattr(entry, 'title', ''), 
@@ -462,6 +575,21 @@ async def scrape_intelligence_feeds():
                         "LOCAL INTEL", 
                         "LeParisien" if "leparisien" in feed_url else "LeFigaro"
                     )
+                    # 🚨 FIX A: 2-second breathing room to prevent 429 rate limit errors
+                    await asyncio.sleep(2)
+                
+                # --- FIX B MODE (UPGRADE - uncomment to enable) ---
+                # Collect articles for batch processing
+                # articles = []
+                # for entry in reversed(feed.entries[:5]):
+                #     articles.append({
+                #         "title": getattr(entry, 'title', ''),
+                #         "summary": getattr(entry, 'description', '')
+                #     })
+                # source_name = "LeParisien" if "leparisien" in feed_url else "LeFigaro"
+                # await analyze_articles_batch(articles, "LOCAL INTEL", source_name)
+                # await asyncio.sleep(2)  # Still wait between batch calls
+                
         except Exception as e:
             print(f"⚠️ Micro feed error: {e}")
     
