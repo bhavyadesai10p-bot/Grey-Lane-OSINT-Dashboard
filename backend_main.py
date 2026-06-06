@@ -28,6 +28,21 @@ GEOGRAPHIC RELEVANCE RULES:
 2. You MUST include incidents in all suburbs, industrial zones, and transport hubs surrounding Paris (e.g., Saint-Denis, Nanterre, La Défense, Créteil, Roissy-CDG).
 3. Do NOT discard an article just because it doesn't mention the city center. If it happens in the suburbs, it IS relevant.
 
+INCIDENT ACCEPTANCE RULES:
+Accept any local news event that impacts daily urban life, safety, or logistics in the region.
+Do NOT restrict yourself to violent crises. If an event details:
+- An arrest or police activity
+- A vehicle accident or traffic incident
+- Property damage or vandalism
+- Localized urban construction or roadwork
+- Regional gatherings, protests, or demonstrations
+- Transit disruptions or service changes
+- Industrial incidents or workplace emergencies
+- Public health or environmental issues
+...then mark 'relevant_to_paris': true.
+
+The map should reflect the full spectrum of urban activity, not just crises.
+
 OUTPUT RULES:
 - If relevant, return JSON with these exact fields: {"relevant_to_paris": true, "exact_location_found": true, "lat": <float>, "lng": <float>, "severity": "low/medium/high", "category": "PROTEST/DAMAGE/CRIME/TRANSIT/SECURITY", "description": "..."}
 - If NOT relevant to the Île-de-France region, return {"relevant_to_paris": false}
@@ -141,13 +156,30 @@ async def process_raw_report(title, description, source_type, source_name):
         return
 
     # 2. KEYWORD SHIELD: Pre-filter text to protect free tier daily limits
+    # Now accepts broader urban incidents: accidents, construction, property damage, gatherings, etc.
     security_keywords = [
-        "protest", "manifestation", "strike", "grève", "riot", "émeute", 
-        "police", "gendarmerie", "pompiers", "attack", "agression", 
-        "stolen", "vol", "cambriolage", "accident", "choc", "blessé",
-        "security", "sécurité", "suspect", "arrest", "interpellé",
-        "transit", "trafic", "métro", "metro", "rer", "bus", "tram", 
-        "fermé", "closed", "suspendu", "incident", "panne", "retard"
+        # Protests & civil unrest
+        "protest", "manifestation", "strike", "grève", "riot", "émeute", "march", "défilé",
+        # Law enforcement & crime
+        "police", "gendarmerie", "pompiers", "attack", "agression", "arrest", "interpellé",
+        "stolen", "vol", "cambriolage", "robbery", "braquage", "crime", "délit",
+        # Accidents & incidents
+        "accident", "crash", "collision", "choc", "blessé", "injured", "fatality", "mort",
+        "incident", "emergency", "secours", "urgence", "sapeurs-pompiers",
+        # Property damage & vandalism
+        "damage", "dégât", "destruction", "vandal", "dégradation", "broken", "cassé",
+        "fire", "incendie", "explosion", "effondrement", "collapse",
+        # Traffic & transit
+        "transit", "trafic", "métro", "metro", "rer", "bus", "tram", "traffic", "congestion",
+        "fermé", "closed", "suspendu", "suspended", "delayed", "retard", "panne", "breakdown",
+        # Construction & urban works
+        "construction", "travaux", "roadwork", "chantier", "road closure", "fermeture",
+        "maintenance", "entretien", "repair", "réparation",
+        # Gatherings & events
+        "gathering", "assembly", "rassemblement", "event", "événement", "festival",
+        # General urban terms (keep map active)
+        "paris", "île-de-france", "region", "région", "incident", "alert", "alerte",
+        "security", "sécurité", "suspect", "risk", "risque", "danger", "emergency", "urgence"
     ]
     
     combined_lower = (title + " " + description).lower()
@@ -160,12 +192,17 @@ async def process_raw_report(title, description, source_type, source_name):
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
 
     prompt = f"""
-    Analyze this incident report:
+    Analyze this urban incident report from the Paris/Île-de-France region:
     Title: "{title}"
     Description: "{description}"
     Source Type: {source_type}
 
-    Extract the precise location (latitude/longitude) if mentioned. If no exact location is named, use the Paris center default (48.8566, 2.3522) and set exact_location_found to false.
+    Determine if this event impacts daily urban life, safety, logistics, or infrastructure in the region.
+    Accept: accidents, arrests, property damage, construction, transit issues, gatherings, etc.
+    Do NOT restrict to violent crises only.
+    
+    Extract the precise location (latitude/longitude) if mentioned. If no exact location is named, 
+    use Paris center (48.8566, 2.3522) and set exact_location_found to false.
     
     Classify severity as: low, medium, or high.
     Classify category as one of: PROTEST, DAMAGE, CRIME, TRANSIT, SECURITY.
