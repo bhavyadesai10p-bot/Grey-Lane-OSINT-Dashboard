@@ -679,8 +679,9 @@
         <div class="ctog active" data-cat="A" onclick="toggleCat('A')"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Civil Unrest</div><div class="ccount" id="cA">0</div></div>
         <div class="ctog active" data-cat="B" onclick="toggleCat('B')"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Property Damage</div><div class="ccount" id="cB">0</div></div>
         <div class="ctog active" data-cat="C" onclick="toggleCat('C')"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">0</div></div>
-        <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">0</div></div>
         <div class="ctog active" data-cat="E" onclick="toggleCat('E')"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">0</div></div>
+        <!-- Transit pushed to the bottom -->
+        <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">0</div></div>
       </div>
 
       <!-- 2. MAP CONTROLS & TEMPORAL MATRIX -->
@@ -715,15 +716,7 @@
         </div>
       </div>
 
-      <!-- 3. REAL-TIME TRANSIT LINE BADGES -->
-      <div class="psec">
-        <div class="stitle">Active Line Operations</div>
-        <div id="live-strike-calendar">
-          <!-- Generated Dynamically from your IDFM Backend Pipeline -->
-        </div>
-      </div>
-
-      <!-- 4. TACTICAL ROUTE SAFETY -->
+      <!-- 3. TACTICAL ROUTE SAFETY -->
       <div class="psec">
         <div class="stitle">Route Safety</div>
         <div class="rte-inputs">
@@ -735,7 +728,7 @@
         <div class="alt-routes" id="alt-routes"></div>
       </div>
 
-      <!-- 5. INDEPENDENT AI INCIDENT PARSER -->
+      <!-- 4. INDEPENDENT AI INCIDENT PARSER -->
       <div class="psec">
         <div class="stitle">AI Incident Parser</div>
         <textarea class="ai-textarea" id="ai-inp" placeholder='Paste raw social / Telegram / news text&#10;&#10;e.g. "manif bd saint-germain CRS gaz lacrymogène"'></textarea>
@@ -743,6 +736,14 @@
         <div class="pi" id="pi"><div class="pd"><span></span><span></span><span></span></div>ANALYSING...</div>
         <div class="ai-result" id="ai-res"></div>
         <button class="btn danger" id="ai-add" style="display:none;margin-top:6px" onclick="addParsed()">＋ ADD TO MAP</button>
+      </div>
+
+      <!-- 5. REAL-TIME TRANSIT LINE BADGES (Pinned to Bottom) -->
+      <div class="psec">
+        <div class="stitle">Active Line Operations</div>
+        <div id="live-strike-calendar">
+          <!-- Generated Dynamically from your IDFM Backend Pipeline -->
+        </div>
       </div>
 
     </div>
