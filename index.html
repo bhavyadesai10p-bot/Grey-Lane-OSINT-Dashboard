@@ -19,76 +19,19 @@
         }
 
         #map {
-            width: 100%;
-            height: 100vh;
+            width: calc(100% - 320px);
+            height: calc(100vh - 55px);
             z-index: 1;
-            cursor: crosshair; 
-        }
-
-        .overlay-box {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 320px;
-            background: rgba(10, 10, 10, 0.85);
-            border-left: 4px solid #ff0000;
-            padding: 15px 20px;
-            color: #fff;
-            z-index: 1000;
-            pointer-events: auto; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            border-radius: 2px;
-        }
-
-        .overlay-box h1 {
-            margin: 0;
-            font-size: 22px;
-            letter-spacing: 1px;
+            cursor: crosshair;
+            position: fixed;
+            top: 55px;
+            left: 320px;
         }
 
         .status {
             font-size: 14px;
             color: #00ff00;
             margin-top: 5px;
-        }
-        
-        .control-panel, .route-panel {
-            margin-top: 15px; 
-            border-top: 1px solid #333; 
-            padding-top: 12px;
-        }
-
-        .rte-input {
-            width: 90%;
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            padding: 8px;
-            margin-bottom: 8px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11px;
-            cursor: pointer;
-        }
-        .rte-input:focus { outline: none; }
-
-        .btn-calc {
-            width: 96%;
-            background: #0055ff;
-            border: 1px solid #0096ff;
-            color: #fff;
-            padding: 10px;
-            font-family: 'Courier New', Courier, monospace;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .btn-calc:hover { background: #0096ff; }
-
-        #rte-result {
-            margin-top: 10px;
-            font-size: 12px;
-            display: none;
-            padding: 10px;
-            line-height: 1.4;
         }
 
         .log-panel {
@@ -166,8 +109,431 @@
         @keyframes pulse-high { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
         @keyframes pulse-medium { 0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 165, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); } }
 
-        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid #333; }
-        .leaflet-popup-tip { background: #111; }
+        /* --- LEFT PANEL STRUCTURE --- */
+        :root {
+            --cat-a: #ff4444;
+            --cat-b: #ff8800;
+            --cat-c: #ffcc00;
+            --cat-d: #00d2ff;
+            --cat-e: #ff00ff;
+            --border: #333;
+        }
+
+        .panel {
+            position: fixed;
+            top: 55px;
+            left: 0;
+            width: 320px;
+            height: calc(100vh - 55px);
+            background: rgba(10, 10, 10, 0.95);
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            z-index: 999;
+            padding: 0;
+        }
+
+        .psec {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stitle {
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #00d2ff;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        /* Category Toggles */
+        .ctog {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 2px;
+        }
+
+        .ctog.active {
+            border-left-color: #00d2ff;
+            background: rgba(0, 210, 255, 0.1);
+        }
+
+        .ctog:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .cdot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .cname {
+            font-size: 12px;
+            color: #ddd;
+            flex-grow: 1;
+            font-family: monospace;
+        }
+
+        .ccount {
+            font-size: 11px;
+            color: #888;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        /* Severity Slider Row */
+        .srow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .slbl {
+            font-size: 10px;
+            color: #888;
+            font-family: monospace;
+            letter-spacing: 1px;
+            width: 60px;
+            flex-shrink: 0;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
+
+        .sval {
+            font-size: 12px;
+            color: #00d2ff;
+            font-family: monospace;
+            font-weight: bold;
+            width: 30px;
+            text-align: center;
+        }
+
+        /* Toggle Rows */
+        .togrow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+        }
+
+        .toglbl {
+            font-size: 12px;
+            color: #ddd;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .togsub {
+            font-size: 9px;
+            color: #888;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+
+        /* Switch Toggle */
+        .sw {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .sw input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .sw-sl {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .sw-sl:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .sw-sl {
+            background-color: #00d2ff;
+        }
+
+        input:checked + .sw-sl:before {
+            transform: translateX(20px);
+        }
+
+        /* Heatbar */
+        #heatbar-wrap {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 2px;
+            border: 1px solid #333;
+        }
+
+        #heatbar {
+            height: 20px;
+            background: linear-gradient(90deg, #2ed573, #ffcc00, #ff8800, #ff4444);
+            border-radius: 2px;
+            margin-bottom: 6px;
+        }
+
+        #hbar-label {
+            font-size: 9px;
+            color: #888;
+            font-family: monospace;
+            text-align: center;
+        }
+
+        /* Route Inputs */
+        .rte-inputs {
+            margin-bottom: 10px;
+        }
+
+        .rte-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .rdot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .rdot.from {
+            background: #2ed573;
+        }
+
+        .rdot.to {
+            background: #ff4444;
+        }
+
+        .rte-input {
+            flex-grow: 1;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #ddd;
+            padding: 6px 8px;
+            font-family: monospace;
+            font-size: 11px;
+            border-radius: 2px;
+        }
+
+        .rte-input:focus {
+            outline: none;
+            border-color: #00d2ff;
+        }
+
+        .rte-result {
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            border-radius: 2px;
+            font-size: 11px;
+            color: #ddd;
+            font-family: monospace;
+        }
+
+        .alt-routes {
+            margin-top: 8px;
+        }
+
+        /* AI Parser */
+        .ai-textarea {
+            width: 100%;
+            height: 80px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #ddd;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            resize: none;
+            border-radius: 2px;
+            margin-bottom: 8px;
+            box-sizing: border-box;
+        }
+
+        .ai-textarea:focus {
+            outline: none;
+            border-color: #00d2ff;
+        }
+
+        .btn {
+            width: 100%;
+            background: #0055ff;
+            border: 1px solid #0096ff;
+            color: #fff;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .btn:hover {
+            background: #0096ff;
+        }
+
+        .btn.danger {
+            background: #ff4444;
+            border-color: #ff6666;
+        }
+
+        .btn.danger:hover {
+            background: #ff6666;
+        }
+
+        /* Loading Spinner */
+        .pi {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .pd {
+            display: flex;
+            gap: 4px;
+        }
+
+        .pd span {
+            width: 4px;
+            height: 4px;
+            background: #00d2ff;
+            border-radius: 50%;
+            animation: pulse-dot 1.4s infinite;
+        }
+
+        .pd span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .pd span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .ai-result {
+            display: none;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .ai-result div {
+            margin-bottom: 6px;
+        }
+
+        .fk {
+            color: #00d2ff;
+            font-weight: bold;
+        }
+
+        .fv {
+            color: #ddd;
+        }
+
+        /* Transit Line Badges */
+        .strike-item {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .stk-title {
+            font-family: monospace;
+            font-size: 11px;
+            color: #ff4444;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .stk-meta {
+            font-family: monospace;
+            font-size: 9px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .stk-lines {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .lbadge {
+            display: inline-block;
+            background: #00d2ff;
+            color: #000;
+            padding: 3px 7px;
+            border-radius: 2px;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        /* Adjust map to account for left panel */
+        #map {
+            margin-left: 320px;
+        }
         .transit-tooltip { background: rgba(10, 10, 10, 0.9); border: 1px solid #444; color: #fff; font-family: monospace; font-weight: bold; }
         
         /* --- TACTICAL STATION TOOLTIPS --- */
@@ -243,31 +609,6 @@
             background: linear-gradient(90deg, rgba(0, 210, 255, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
         }
 
-        #btn-transit-toggle {
-            background: #111; 
-            color: #00d2ff; 
-            border: 1px solid #00d2ff; 
-            padding: 6px 12px; 
-            font-family: monospace; 
-            font-size: 12px; 
-            cursor: pointer; 
-            border-radius: 3px; 
-            letter-spacing: 1px;
-            transition: all 0.2s ease;
-        }
-
-        #btn-transit-toggle:hover {
-            background: #00d2ff;
-            color: #000;
-            box-shadow: 0 0 10px #00d2ff;
-        }
-
-        #btn-transit-toggle.active {
-            background: #00d2ff;
-            color: #000;
-            box-shadow: 0 0 15px #00d2ff;
-        }
-
         /* --- COMMAND HEADER STYLING --- */
         #top-header {
             position: fixed; top: 0; left: 0; right: 0; height: 55px;
@@ -292,8 +633,7 @@
         .stat-line { width: 1px; height: 25px; background: #222d3d; }
         
         #header-clock { font-family: monospace; font-size: 13px; color: #00d2ff; letter-spacing: 1px; }
-        /* Push existing map and sidebar down so they don't hide behind the header */
-        #map, #sidebar { top: 55px !important; height: calc(100vh - 55px) !important; }
+        
         /* --- TACTICAL CLUSTER OVERRIDES --- */
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(0,0,0,0.6) !important; }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
@@ -324,45 +664,81 @@
         <div id="header-clock">--:--:-- CET</div>
     </div>
 
-    <div class="overlay-box">
-        <h1>Grey Lane | Paris OSINT</h1>
-        <div class="status" id="status-text">Connecting to intelligence feed...</div>
-        
-<div class="control-panel">
-    <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #aaa; margin-bottom: 5px;">
-        <input type="checkbox" id="tog-transit" onchange="toggleTransit()" checked style="margin-right: 10px;">
-        [X] ENABLE TRANSIT GRID
-    </label>
-    <!-- NEW HEATMAP TOGGLE -->
-    <label style="cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #ff4444;">
-        <input type="checkbox" id="tog-heatmap" onchange="toggleHeatmap(this.checked)" style="margin-right: 10px;">
-        [X] SHOW CHRONIC THREAT ZONES
-    </label>
-</div>
+    <!-- LEFT PANEL (Main Project Upgrade) -->
+    <div id="panel-left" class="panel">
 
-        <div class="route-panel">
-            <div style="font-size: 12px; color: #888; margin-bottom: 8px;">ROUTE SAFETY ENGINE</div>
-            <input type="text" id="rte-from" class="rte-input" placeholder="Origin (Click Map)" readonly style="border-color: #00d4ff;">
-            <input type="text" id="rte-to" class="rte-input" placeholder="Destination (Click Map)" readonly>
-            <button class="btn-calc" onclick="calculateRoute()">▶ RUN THREAT SCAN</button>
-            <div id="rte-result"></div>
+      <!-- 1. LIVE CATEGORIES CONTROLLER -->
+      <div class="psec">
+        <div class="stitle">Categories</div>
+        <div class="ctog active" data-cat="A" onclick="toggleCat('A')"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Civil Unrest</div><div class="ccount" id="cA">0</div></div>
+        <div class="ctog active" data-cat="B" onclick="toggleCat('B')"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Property Damage</div><div class="ccount" id="cB">0</div></div>
+        <div class="ctog active" data-cat="C" onclick="toggleCat('C')"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">0</div></div>
+        <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">0</div></div>
+        <div class="ctog active" data-cat="E" onclick="toggleCat('E')"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">0</div></div>
+      </div>
+
+      <!-- 2. MAP CONTROLS & TEMPORAL MATRIX -->
+      <div class="psec">
+        <div class="stitle">Filters</div>
+        <div class="srow">
+          <div class="slbl">MIN SEV</div>
+          <input type="range" id="sev-sl" min="1" max="5" value="1" oninput="onSev(this.value)">
+          <div class="sval" id="sev-v">1</div>
         </div>
-
-        <div class="psec" style="border-top: 1px solid var(--border); padding-top: 20px;">
-            <div class="stitle">Route Safety Scanner</div>
-            <div style="font-family: monospace; font-size: 10px; color: #8899aa; margin-bottom: 10px;">
-              INSTRUCTIONS: Click any two points on the map to draw a travel vector and scan for Active Risk Zones.
-            </div>
-            <div id="route-status" style="margin-top: 5px; font-family: monospace; font-size: 11px;">
-              </div>
+        <div style="margin-top:14px">
+          <div class="togrow">
+            <div><div class="toglbl">Verified only</div><div class="togsub">Hide unconfirmed</div></div>
+            <label class="sw"><input type="checkbox" id="tog-vfd" onchange="applyFilters()"><span class="sw-sl"></span></label>
           </div>
-
-        <div class="psec" style="border-top: 1px solid var(--border); padding-top: 20px;">
-            <div class="stitle">Data Operations</div>
-            <button class="btn" style="background: rgba(0, 210, 255, 0.1); border-color: #00d2ff; color: #00d2ff; font-weight: bold; width: 96%; padding: 10px; border: 1px solid #00d2ff; cursor: pointer; font-family: 'Courier New', Courier, monospace;" onclick="exportDailyBrief()">
-              📥 EXPORT DAILY BRIEF (.CSV)
-            </button>
+          <div class="togrow">
+            <div><div class="toglbl">Transit overlay</div><div class="togsub">Métro + RER lines</div></div>
+            <label class="sw"><input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)"><span class="sw-sl"></span></label>
+          </div>
+          <div class="togrow">
+            <div><div class="toglbl">Cluster markers</div><div class="togsub">Group nearby pins</div></div>
+            <label class="sw"><input type="checkbox" id="tog-cluster" checked onchange="toggleClusterMode(this.checked)"><span class="sw-sl"></span></label>
+          </div>
         </div>
+
+        <div style="margin-top:14px">
+          <div class="slbl" style="margin-bottom:8px">TEMPORAL DENSITY</div>
+          <div id="heatbar-wrap">
+            <div id="heatbar"></div>
+            <div id="hbar-label">All 24h · <span id="hbar-active">All incidents</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. REAL-TIME TRANSIT LINE BADGES -->
+      <div class="psec">
+        <div class="stitle">Active Line Operations</div>
+        <div id="live-strike-calendar">
+          <!-- Generated Dynamically from your IDFM Backend Pipeline -->
+        </div>
+      </div>
+
+      <!-- 4. TACTICAL ROUTE SAFETY -->
+      <div class="psec">
+        <div class="stitle">Route Safety</div>
+        <div class="rte-inputs">
+          <div class="rte-row"><div class="rdot from"></div><input type="text" class="rte-input" id="rte-from" placeholder="From: click map or type"></div>
+          <div class="rte-row"><div class="rdot to"></div><input type="text" class="rte-input" id="rte-to" placeholder="To: click map or type"></div>
+        </div>
+        <button class="btn" onclick="checkRoute()">▶ CHECK ROUTE</button>
+        <div class="rte-result" id="rte-result"></div>
+        <div class="alt-routes" id="alt-routes"></div>
+      </div>
+
+      <!-- 5. INDEPENDENT AI INCIDENT PARSER -->
+      <div class="psec">
+        <div class="stitle">AI Incident Parser</div>
+        <textarea class="ai-textarea" id="ai-inp" placeholder='Paste raw social / Telegram / news text&#10;&#10;e.g. "manif bd saint-germain CRS gaz lacrymogène"'></textarea>
+        <button class="btn" onclick="parseAI()">⚡ PARSE VIA ENGINE</button>
+        <div class="pi" id="pi"><div class="pd"><span></span><span></span><span></span></div>ANALYSING...</div>
+        <div class="ai-result" id="ai-res"></div>
+        <button class="btn danger" id="ai-add" style="display:none;margin-top:6px" onclick="addParsed()">＋ ADD TO MAP</button>
+      </div>
+
     </div>
 
     <div class="log-panel">
@@ -371,12 +747,6 @@
     </div>
 
     <div id="map"></div>
-
-    <div style="position: absolute; top: 20px; left: 370px; z-index: 1000;">
-        <button id="btn-transit-toggle" onclick="toggleTransit()" class="active">
-            [ TRANSIT: ON ]
-        </button>
-    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
@@ -410,23 +780,21 @@
         let isTransitVisible = true;
 
         // The Master Switch Function
-        function toggleTransit() {
-            const btn = document.getElementById('btn-transit-toggle');
+        function toggleTransit(isChecked) {
             const checkbox = document.getElementById('tog-transit');
-            if (isTransitVisible) {
-                map.removeLayer(transitLayer);
-                btn.style.color = "#555";
-                btn.style.borderColor = "#555";
-                btn.innerText = "[ TRANSIT: OFF ]";
-                checkbox.checked = false;
-                isTransitVisible = false;
+            if (isChecked !== undefined) {
+                // Called from checkbox onchange
+                isTransitVisible = isChecked;
             } else {
+                // Called from code
+                isTransitVisible = !isTransitVisible;
+                if (checkbox) checkbox.checked = isTransitVisible;
+            }
+            
+            if (isTransitVisible) {
                 map.addLayer(transitLayer);
-                btn.style.color = "#00d2ff";
-                btn.style.borderColor = "#00d2ff";
-                btn.innerText = "[ TRANSIT: ON ]";
-                checkbox.checked = true;
-                isTransitVisible = true;
+            } else {
+                map.removeLayer(transitLayer);
             }
         } 
 
@@ -752,8 +1120,171 @@
         }
 
         // ══════════════════════════════════════════════════════════
-        // EXPORT INTELLIGENCE ENGINE
+        // LEFT PANEL CONTROL WIRING
         // ══════════════════════════════════════════════════════════
+        
+        let allLoadedMarkers = [];
+        let activeCategoryFilters = { A: true, B: true, C: true, D: true, E: true };
+        let minSeverityFilter = 1;
+
+        // Connect WebSocket data directly into left panel DOM elements
+        const originalOnMessage = ws.onmessage;
+        ws.onmessage = function(event) {
+            const incomingData = JSON.parse(event.data);
+            
+            // 1. If it's transit alert payload data, update our Operations Badges
+            if (incomingData.source_type === 'transit_api_payload' && incomingData.alerts) {
+                renderDynamicLineAlerts(incomingData.alerts);
+            }
+            
+            // 2. Call original message handler
+            originalOnMessage.call(ws, event);
+            
+            // 3. Dynamically recount layout totals for Categories counters
+            updateLiveCategoryBadges();
+        };
+
+        function renderDynamicLineAlerts(alerts) {
+            const container = document.getElementById('live-strike-calendar');
+            if (!container || !alerts) return;
+            // Map out real lines (e.g. M1, RER A) into badge components
+            container.innerHTML = alerts.slice(0, 4).map(alert => {
+                // Automatically isolate the code identifiers (e.g., "1", "A", "13")
+                const lineBadge = alert.line_code ? `<span class="lbadge">${alert.line_mode === 'metro' ? 'M' : ''}${alert.line_code}</span>` : '';
+                
+                return `
+                    <div class="strike-item">
+                        <div class="stk-title">${alert.title || 'Transit Disruption'}</div>
+                        <div class="stk-meta">Severity ${alert.severity} · Status: Active</div>
+                        <div class="stk-lines">${lineBadge}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateLiveCategoryBadges() {
+            // Collect all active layers from your running arrays and push innerText values
+            ['A', 'B', 'C', 'D', 'E'].forEach(cat => {
+                const count = activeIncidents.filter(m => {
+                    // Map incident categories to letter codes
+                    let catCode = 'A';
+                    if (m.category === 'PROPERTY_DAMAGE') catCode = 'B';
+                    if (m.category === 'CRIME') catCode = 'C';
+                    if (m.category === 'TRANSIT') catCode = 'D';
+                    if (m.category === 'SECURITY') catCode = 'E';
+                    return catCode === cat;
+                }).length;
+                const element = document.getElementById('c' + cat);
+                if (element) element.textContent = count;
+            });
+        }
+
+        function toggleCat(cat) {
+            activeCategoryFilters[cat] = !activeCategoryFilters[cat];
+            const toggle = document.querySelector(`[data-cat="${cat}"]`);
+            if (toggle) {
+                toggle.classList.toggle('active');
+            }
+            applyFilters();
+        }
+
+        function onSev(val) {
+            minSeverityFilter = parseInt(val);
+            document.getElementById('sev-v').textContent = val;
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const verifiedOnly = document.getElementById('tog-vfd').checked;
+            // Apply filters to all markers on map
+            masterCluster.eachLayer(layer => {
+                let show = true;
+                // Add filter logic here
+                layer.setOpacity(show ? 1 : 0.2);
+            });
+        }
+
+        function toggleClusterMode(enabled) {
+            if (enabled) {
+                map.addLayer(masterCluster);
+            } else {
+                map.removeLayer(masterCluster);
+            }
+        }
+
+        function checkRoute() {
+            const from = document.getElementById('rte-from').value;
+            const to = document.getElementById('rte-to').value;
+            if (!from || !to) {
+                document.getElementById('rte-result').innerHTML = '<span style="color: #ff4444;">Please enter both origin and destination</span>';
+                return;
+            }
+            document.getElementById('rte-result').innerHTML = '<span style="color: #00d2ff;">Calculating route...</span>';
+            // Route calculation logic would go here
+        }
+
+        async function parseAI() {
+            const textContent = document.getElementById('ai-inp').value.trim();
+            if (!textContent) return;
+            
+            const loader = document.getElementById('pi');
+            const resultBox = document.getElementById('ai-res');
+            const addButton = document.getElementById('ai-add');
+            
+            loader.style.display = 'flex';
+            resultBox.style.display = 'none';
+            addButton.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/parse-incident', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: textContent })
+                });
+                
+                const parsedData = await response.json();
+                
+                // Expose structured properties inside your UI metrics
+                resultBox.innerHTML = `
+                    <div><span class="fk">CATEGORY: </span><span class="fv">${parsedData.category}</span></div>
+                    <div><span class="fk">TYPE: </span><span class="fv">${parsedData.incident_type}</span></div>
+                    <div><span class="fk">SEVERITY: </span><span class="fv">${parsedData.severity}/5</span></div>
+                    <div><span class="fk">COORDS: </span><span class="fv">${parsedData.lat}, ${parsedData.lng}</span></div>
+                `;
+                
+                resultBox.style.display = 'block';
+                addButton.style.display = 'block';
+                
+                // Keep a temporary reference to store onto map if validated
+                window.latestParsedIncident = parsedData;
+                
+            } catch (error) {
+                resultBox.innerHTML = `<span style="color:var(--cat-a)">Parsing Timeout / Failure</span>`;
+                resultBox.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        function addParsed() {
+            if (window.latestParsedIncident) {
+                const incident = window.latestParsedIncident;
+                // Add to map by creating a marker
+                const marker = L.marker([incident.lat, incident.lng], {
+                    icon: L.divIcon({
+                        className: 'osint-marker',
+                        html: `<div style="width: 100%; height: 100%; background: #ff4444; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 8px #ff4444;"></div>`,
+                        iconSize: [12, 12],
+                        iconAnchor: [6, 6]
+                    })
+                });
+                marker.addTo(map);
+                map.flyTo([incident.lat, incident.lng], 15);
+                document.getElementById('ai-inp').value = '';
+                document.getElementById('ai-res').style.display = 'none';
+                document.getElementById('ai-add').style.display = 'none';
+            }
+        }
         function exportDailyBrief() {
             if (activeIncidents.length === 0) {
                 alert("⚠️ No active intelligence on the map to export.");
