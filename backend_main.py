@@ -257,9 +257,73 @@ async def process_raw_report(title, description, source_type, source_name):
     except Exception as e:
         print(f"⚠️ Intel processing skipped: {type(e).__name__}: {e}")
 
+# --- SUBURBAN COORDINATE FALLBACKS ---
+# Map transit lines/zones to their appropriate suburban department coordinates
+SUBURBAN_ZONES = {
+    # Department 92 (Hauts-de-Seine): La Défense, Nanterre, Boulogne
+    92: {"name": "La Défense / Nanterre", "lat": 48.8924, "lng": 2.2362},
+    # Department 93 (Seine-Saint-Denis): Saint-Denis, Roissy-CDG, Aulnay
+    93: {"name": "Saint-Denis / Roissy", "lat": 48.9356, "lng": 2.3539},
+    # Department 94 (Val-de-Marne): Créteil, Vitry, Champigny
+    94: {"name": "Créteil / Vitry", "lat": 48.7831, "lng": 2.4534},
+    # Department 95 (Val-d'Oise): Cergy, Pontoise, Roissy North
+    95: {"name": "Cergy / Pontoise", "lat": 49.0187, "lng": 2.0669},
+    # Department 77 (Seine-et-Marne): Meaux, Fontainebleau, East suburbs
+    77: {"name": "Meaux / Fontainebleau", "lat": 48.9564, "lng": 2.8837},
+    # Department 78 (Yvelines): Versailles, Saint-Germain, West suburbs
+    78: {"name": "Versailles / Saint-Germain", "lat": 48.8041, "lng": 2.1007},
+    # Department 91 (Essonne): Évry, Corbeil, South suburbs
+    91: {"name": "Évry / Corbeil", "lat": 48.6292, "lng": 2.4413},
+    # Central Paris (75) - fallback if department unknown
+    75: {"name": "Central Paris", "lat": 48.8566, "lng": 2.3522},
+}
+
+def infer_department_from_line(line_name, station_name):
+    """
+    Intelligently map transit lines/stations to their department zone.
+    Returns the department code (75-95) or None if unknown.
+    """
+    combined = f"{line_name} {station_name}".upper()
+    
+    # RER & Train line mappings
+    rer_dept_map = {
+        "RER A": 92,  # Passes through La Défense
+        "RER B": 93,  # Passes through Roissy
+        "RER C": 75,  # South/Central
+        "RER D": 93,  # Saint-Denis direction
+        "RER E": 75,  # Central
+        "RER H": 75,  # Central
+        "TRANSILIEN": 77,  # East/Southeast
+        "TER": 77,  # Regional trains - east
+    }
+    
+    # Suburban station keywords → department
+    station_dept_map = {
+        "DÉFENSE": 92, "NANTERRE": 92, "BOULOGNE": 92, "LEVALLOIS": 92,
+        "DENIS": 93, "ROISSY": 93, "AULNAY": 93, "MONTREUIL": 93,
+        "CRÉTEIL": 94, "VITRY": 94, "CHAMPIGNY": 94, "IVRY": 94,
+        "CERGY": 95, "PONTOISE": 95, "GONESSE": 95,
+        "VERSAILLES": 78, "SAINT-GERMAIN": 78, "MARLY": 78,
+        "ÉVRY": 91, "CORBEIL": 91, "ESSONNE": 91,
+        "MEAUX": 77, "FONTAINEBLEAU": 77, "SEINE-ET-MARNE": 77,
+    }
+    
+    # Check RER/Line patterns
+    for line_pattern, dept in rer_dept_map.items():
+        if line_pattern in combined:
+            return dept
+    
+    # Check station keywords
+    for station_keyword, dept in station_dept_map.items():
+        if station_keyword in combined:
+            return dept
+    
+    return None  # Unknown - will use default Paris
+
 # --- IDFM OFFICIAL TRANSIT API ---
 def fetch_idfm_transit_status():
-    """Queries the official IDFM API, parses disruptions, and saves them to the database."""
+    """Queries the official IDFM API, parses disruptions, and saves them to the database.
+    Now intelligently maps suburban transit to appropriate coordinates instead of centralizing."""
     print("🚇 Polling IDFM Official Transit API...")
     url = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/disruptions"
     headers = {"apiKey": IDFM_API_KEY}
@@ -282,9 +346,25 @@ def fetch_idfm_transit_status():
                 severity = dist.get("severity", {}).get("name", "warning")
                 category = "TRANSIT"
                 
-                # 3. Extract Coordinates
-                lat, lon = 48.8566, 2.3522 # Default to Paris center
+                # 3. Extract line/route info for intelligent department mapping
+                line_name = ""
+                station_name = ""
                 impacted = dist.get("impacted_objects", [])
+                
+                if impacted:
+                    pt_object = impacted[0].get("pt_object", {})
+                    
+                    # Try to get line information
+                    if "line" in pt_object:
+                        line_name = pt_object["line"].get("name", "")
+                    
+                    # Try to get stop/station information
+                    stop_area = pt_object.get("stop_area", {})
+                    if stop_area:
+                        station_name = stop_area.get("name", "")
+                
+                # 4. Try to extract actual coordinates from API
+                lat, lon = None, None
                 if impacted:
                     pt_object = impacted[0].get("pt_object", {})
                     stop_area = pt_object.get("stop_area", {})
@@ -293,18 +373,26 @@ def fetch_idfm_transit_status():
                         lat = float(coord["lat"])
                         lon = float(coord["lon"])
                 
-                # --- NEW: THE MICRO-JITTER ---
-                # If it used the default center coords, spread them out slightly!
-                if lat == 48.8566 and lon == 2.3522:
-                    lat += random.uniform(-0.01, 0.01)
-                    lon += random.uniform(-0.01, 0.01)
+                # 5. Intelligent fallback: infer department from line/station
+                if lat is None or lon is None:
+                    inferred_dept = infer_department_from_line(line_name, station_name)
+                    if inferred_dept and inferred_dept in SUBURBAN_ZONES:
+                        zone = SUBURBAN_ZONES[inferred_dept]
+                        lat = zone["lat"]
+                        lon = zone["lng"]
+                        print(f"🗺️ Mapped '{line_name}' to {zone['name']} ({inferred_dept})")
+                    else:
+                        # Ultimate fallback: default to central Paris
+                        lat = PARIS_CENTER_LAT
+                        lon = PARIS_CENTER_LNG
+                        print(f"⚠️ Could not infer location for '{line_name}' at '{station_name}', using central Paris")
                 
-                # 4. Save to your SQLite Database (skips Gemini entirely!)
+                # 6. Save to database
                 incident_data = {
                     "lat": lat,
                     "lng": lon,
                     "category": category,
-                    "description": f"[IDFM] {text_alert}",
+                    "description": f"[IDFM] {text_alert}<br><strong>Line:</strong> {line_name}",
                     "severity": severity
                 }
                 store_incident(incident_data)
