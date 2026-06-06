@@ -18,14 +18,38 @@
             overflow: hidden;
         }
 
+        /* --- LEFT PANEL STRUCTURE --- */
+        :root {
+            --panel-w: 310px;
+            --cat-a: #ff4444;
+            --cat-b: #ff8800;
+            --cat-c: #ffcc00;
+            --cat-d: #00d2ff;
+            --cat-e: #ff00ff;
+            --border: #333;
+        }
+
         #map {
-            width: calc(100% - 320px);
+            width: calc(100% - var(--panel-w));
             height: calc(100vh - 55px);
             z-index: 1;
             cursor: crosshair;
             position: fixed;
             top: 55px;
-            left: 320px;
+            left: var(--panel-w);
+        }
+
+        .panel {
+            position: fixed;
+            top: 55px;
+            left: 0;
+            width: var(--panel-w);
+            height: calc(100vh - 55px);
+            background: rgba(10, 10, 10, 0.95);
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            z-index: 999;
+            padding: 0;
         }
 
         .status {
@@ -109,30 +133,8 @@
         @keyframes pulse-high { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
         @keyframes pulse-medium { 0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 165, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); } }
 
-        /* --- LEFT PANEL STRUCTURE --- */
-        :root {
-            --cat-a: #ff4444;
-            --cat-b: #ff8800;
-            --cat-c: #ffcc00;
-            --cat-d: #00d2ff;
-            --cat-e: #ff00ff;
-            --border: #333;
-        }
-
-        .panel {
-            position: fixed;
-            top: 55px;
-            left: 0;
-            width: 320px;
-            height: calc(100vh - 55px);
-            background: rgba(10, 10, 10, 0.95);
-            border-right: 1px solid #333;
-            overflow-y: auto;
-            z-index: 999;
-            padding: 0;
-        }
-
-        .psec {
+        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid #333; }
+        .leaflet-popup-tip { background: #111; }
             padding: 16px;
             border-bottom: 1px solid var(--border);
         }
