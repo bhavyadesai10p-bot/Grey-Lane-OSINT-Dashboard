@@ -7,7 +7,6 @@ import re
 import sqlite3
 import requests
 import time
-import urllib.request
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -61,19 +60,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 PARIS_CENTER_LAT, PARIS_CENTER_LNG = 48.8566, 2.3522
 DB_FILE = "greylane_local.db"
-
-# --- STEP 1: UPDATED FEED URLs ---
-MACRO_FEEDS = [
-    "https://www.france24.com/fr/france/rss",                    # France24 (National/Societal)
-    "https://www.lefigaro.fr/rss/figaro_actualite-france.xml",   # Le Figaro (French News)
-]
-
-MICRO_FEEDS = [
-    "https://partner-feeds.20minutes.fr/rss/paris.xml",          # 20 Minutes Paris (Hyper-local breaking city news)
-    "https://www.francetvinfo.fr/ile-de-france/paris/rss",       # France TV (Hyper-local Paris - backup)
-]
-
-TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
 
 # --- SYSTEM 1: AUTOMATIC LIFETIME-FREE SQLITE DATABASE ---
 def init_db():
@@ -129,6 +115,16 @@ def database_auto_scrub():
     conn.close()
     if deleted_count > 0:
         print(f"🧹 DATABASE AUTO-SCRUB: Cleared {deleted_count} expired threat profiles (>24h).")
+
+# --- DATA SOURCE FEEDS ---
+NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
+TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
+
+# Hyper-Local Parisian Micro-Feeds
+MICRO_FEEDS = [
+    "https://www.leparisien.fr/paris-75/rss.xml", 
+    "https://www.lefigaro.fr/paris/rss.xml"       
+]
 
 # --- CORE INTEL PROCESSING ENGINE ---
 async def process_raw_report(title, description, source_type, source_name):
@@ -283,85 +279,19 @@ def fetch_idfm_transit_status():
     except Exception as e:
         print(f"⚠️ IDFM Connection Error: {e}")
         return []
-
+        
 # --- TRACKER LOOPS ---
-async def master_intelligence_loop():
-    database_auto_scrub()
-
-    print("📰 Scraping Macro French News Feeds...")
-    for feed_url in MACRO_FEEDS:
-        try:
-            # Pretend to be a Google Chrome browser to bypass blocks
-            req = urllib.request.Request(
-                feed_url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            html = urllib.request.urlopen(req).read()
-            feed = feedparser.parse(html)
-            
-            # 🚨 RADAR PING: See exactly how much data is coming in!
-            print(f"📡 RADAR PING: Found {len(feed.entries)} articles at {feed_url}")
-            
-            if feed.entries:
-                for entry in reversed(feed.entries[:10]):  # Top 10 articles
-                    await process_raw_report(
-                        getattr(entry, 'title', ''), 
-                        getattr(entry, 'description', ''), 
-                        "NEWS", 
-                        "France24" if "france24" in feed_url else "Le Figaro"
-                    )
-        except Exception as e:
-            print(f"❌ Error fetching {feed_url}: {e}")
-            continue
-
-    # --- STEP 2: FIXED MICRO FEED SCRAPING ENGINE ---
-    print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
-    for feed_url in MICRO_FEEDS:
-        try:
-            # Pretend to be a Google Chrome browser to bypass blocks
-            req = urllib.request.Request(
-                feed_url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            html = urllib.request.urlopen(req).read()
-            parsed_feed = feedparser.parse(html)
-            
-            # 🚨 RADAR PING: See exactly how much data is coming in!
-            print(f"📡 RADAR PING: Found {len(parsed_feed.entries)} articles at {feed_url}")
-            
-            # Force the system to loop through the top 10 articles of EACH feed
-            for entry in parsed_feed.entries[:10]: 
-                headline = entry.get('title', '')
-                summary = entry.get('summary', '')
-                full_text = f"{headline} - {summary}"
-                
-                print(f"🧠 AI Analyzing LOCAL INTEL: {headline[:50]}...")
-                
-                # Send to process_raw_report (existing AI function)
-                await process_raw_report(
-                    headline,
-                    summary,
-                    "LOCAL INTEL",
-                    "20Minutes" if "20minutes" in feed_url else "FranceTV"
-                )
-            
-        except Exception as e:
-            print(f"❌ Error fetching {feed_url}: {e}")
-            continue
-
+async def scrape_transit_data():
+    """
+    Fetches real-time transit disruptions from RATP and IDFM.
+    Runs first so transport updates hit the map instantly.
+    """
+    print("🚇 Polling IDFM Official Transit API...")
+    fetch_idfm_transit_status()
+    
     print("🚇 Scraping Local Paris Transit Disruption Streams...")
     try:
-        # Pretend to be a Google Chrome browser to bypass blocks
-        req = urllib.request.Request(
-            TRANSIT_FEED, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        )
-        html = urllib.request.urlopen(req).read()
-        transit_feed = feedparser.parse(html)
-        
-        # 🚨 RADAR PING: See exactly how much data is coming in!
-        print(f"📡 RADAR PING: Found {len(transit_feed.entries)} articles at {TRANSIT_FEED}")
-        
+        transit_feed = feedparser.parse(TRANSIT_FEED)
         if transit_feed.entries:
             for entry in reversed(transit_feed.entries[:10]):
                 await process_raw_report(
@@ -371,26 +301,102 @@ async def master_intelligence_loop():
                     "RATP Live Traffic"
                 )
     except Exception as e:
-        print(f"❌ Error fetching TRANSIT_FEED: {e}")
+        print(f"⚠️ Transit feed error: {e}")
     
-    print("🔌 Querying Official IDFM Transit API...")
-    fetch_idfm_transit_status()
-    
-    print("✅ System Core Scrapers Synchronized.")
+    print("✅ Transit data synchronized.")
 
-async def background_task():
-    await master_intelligence_loop()
+async def scrape_intelligence_feeds():
+    """
+    Fetches and analyzes macro news and hyper-local Paris intel.
+    Uses AI to classify incidents and push them to the map.
+    """
+    print("📰 Scraping Macro French News Feeds...")
+    for feed_url in NEWS_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if feed.entries:
+                for entry in reversed(feed.entries[:5]):
+                    await process_raw_report(
+                        getattr(entry, 'title', ''), 
+                        getattr(entry, 'description', ''), 
+                        "NEWS", 
+                        "France24" if "france24" in feed_url else "RFI"
+                    )
+        except Exception as e:
+            print(f"⚠️ Macro feed error: {e}")
+
+    print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
+    for feed_url in MICRO_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if feed.entries:
+                for entry in reversed(feed.entries[:5]):
+                    await process_raw_report(
+                        getattr(entry, 'title', ''), 
+                        getattr(entry, 'description', ''), 
+                        "LOCAL INTEL", 
+                        "LeParisien" if "leparisien" in feed_url else "LeFigaro"
+                    )
+        except Exception as e:
+            print(f"⚠️ Micro feed error: {e}")
+    
+    print("✅ Intelligence feeds synchronized.")
+
+async def intelligence_gathering_loop():
+    """
+    Background worker that handles all OSINT data fetching silently in the background,
+    preventing any frontend timeouts or lag.
+    
+    Sequence:
+    1. Clean old data (>24h)
+    2. Scrape transit (fast, hits map instantly)
+    3. Scrape intelligence feeds (AI analysis)
+    4. Rest for 5 minutes before next cycle
+    """
     while True:
-        await asyncio.sleep(180) # Scans every 3 minutes to optimize pipeline health
-        await master_intelligence_loop()
+        try:
+            print("🚀 Starting background intelligence sweep...")
+            
+            # Clean old incidents from database first
+            database_auto_scrub()
+            
+            # 1. Run transit first so transport updates hit the map instantly
+            await scrape_transit_data()
+            
+            # 2. Run the heavier AI news analysis loops right after
+            await scrape_intelligence_feeds()
+            
+            print("✅ Sweep complete. Resting for 5 minutes...")
+            await asyncio.sleep(300)  # Wait 5 minutes before pulling new data
+            
+        except Exception as e:
+            print(f"❌ Error in background intelligence worker: {type(e).__name__}: {e}")
+            print("⏱️ Retrying in 60 seconds...")
+            await asyncio.sleep(60)  # Wait 1 minute before retrying if something fails
 
-# --- FASTAPI LIFESPAN ---
+# --- FASTAPI LIFESPAN & STARTUP ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Modern FastAPI startup/shutdown handler using lifespan context manager."""
     print("🚀 Booting Multi-Source AI OSINT Dashboard Server...")
-    init_db() 
-    asyncio.create_task(background_task())
+    print("⚙️  Initializing SQLite database...")
+    init_db()
+    
+    print("🧠 Launching background intelligence gathering loop (5-minute intervals)...")
+    asyncio.create_task(intelligence_gathering_loop())
+    print("🤖 Background intelligence worker successfully detached and running.")
+    
+    print("✅ Server ready! Website loads instantly. Scraping runs in background.")
     yield
+    
+    print("🛑 Shutting down server...")
+
+# Alternative startup method (both approaches work)
+# Uncomment to use classic @app.on_event approach instead of lifespan:
+# @app.on_event("startup")
+# async def startup_event():
+#     asyncio.create_task(intelligence_gathering_loop())
+#     print("🤖 Background intelligence worker detached.")
 
 # --- FASTAPI APP ---
 app = FastAPI(title="Grey Lane Backend", lifespan=lifespan)
