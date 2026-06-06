@@ -29,9 +29,10 @@
             --border: #333;
         }
 
+        /* --- UPDATED PANEL & MAP HEIGHTS TO CLEAR FOOTER --- */
         #map {
             width: calc(100% - var(--panel-w));
-            height: calc(100vh - 55px);
+            height: calc(100vh - 55px - 65px); /* Subtract top header and bottom bar */
             z-index: 1;
             cursor: crosshair;
             position: fixed;
@@ -44,7 +45,7 @@
             top: 55px;
             left: 0;
             width: var(--panel-w);
-            height: calc(100vh - 55px);
+            height: calc(100vh - 55px - 65px); /* Clear bottom bar height */
             background: rgba(10, 10, 10, 0.95);
             border-right: 1px solid #333;
             overflow-y: auto;
@@ -63,7 +64,7 @@
             top: 20px;
             right: 20px;
             width: 320px;
-            height: calc(100vh - 40px);
+            height: calc(100vh - 40px - 65px); /* Clear bottom bar height */
             background: rgba(10, 10, 10, 0.85);
             border-right: 4px solid #00d4ff;
             color: #fff;
@@ -647,6 +648,52 @@
             font-family: monospace !important; font-size: 12px !important; font-weight: bold;
             border: 1px solid #00d2ff !important; box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
         }
+
+        /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
+        #bottom-authority-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 65px;
+            background: #07090c;
+            border-top: 1px solid #1a222d;
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            gap: 20px;
+        }
+
+        .footer-logo-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-shrink: 0;
+        }
+
+        .footer-gl-main {
+            height: 48px;
+            border-right: 1px solid #1a222d;
+            padding-right: 15px;
+        }
+
+        .footer-logo-img {
+            height: 24px;
+            object-fit: contain;
+            filter: grayscale(1) brightness(0.7);
+            opacity: 0.8;
+        }
+
+        .footer-legal-text {
+            font-family: monospace;
+            font-size: 8px;
+            color: #556677;
+            line-height: 1.5;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
@@ -654,10 +701,11 @@
     <div id="top-header">
         <div class="header-left">
             <div id="live-dot"></div>
-            <div id="logo-block">
+            <div id="logo-block" style="display: flex; align-items: baseline; gap: 6px;">
                 <span style="color: #8899aa; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">GREY</span> 
-                <span style="color: #00d2ff; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">LANE</span>
-                <div style="font-family: monospace; font-size: 9px; color: #555; letter-spacing: 3px; margin-top: -4px;">PARIS OSINT</div>
+                <span style="color: #8899aa; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">LANE</span>
+                <span style="color: #ff2d78; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; margin-left: 6px;">PARIS</span>
+                <span style="color: #00d2ff; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">OSINT</span>
             </div>
         </div>
         <div id="header-stats">
@@ -1326,5 +1374,22 @@
             document.body.removeChild(link);
         }
     </script>
+
+    <!-- BOTTOM SYSTEM COMPLIANCE & AUTHORITATIVE DATA LAYER -->
+    <div id="bottom-authority-bar">
+        <div class="footer-logo-group">
+            <!-- Your New Elite Round Seal -->
+            <img class="footer-gl-main" src="new logo grey lane.png" alt="Grey Lane Security Grid">            
+            <!-- Regional Media & Public Infrastructure Vector Nodes -->
+            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/2/22/France_24_logo.svg" alt="FRANCE 24 Ingestion Axis">
+            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/e/e0/Le_Parisien.svg" alt="LE PARISIEN Feed Node">
+            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/d/de/Logo_data.gouv.fr.svg" alt="DATA.GOUV REGISTRY CONTAINER">
+            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_Île-de-France_Mobilités.svg" alt="IDFM TRANSIT CORE PIPE">
+        </div>
+        
+        <div class="footer-legal-text">
+            INTEGRATED SYSTEM DEPLOYMENT OPERATING IN CONFORMANCE WITH REGIONAL OPEN DATA INITIATIVES AND MUNICIPAL REPORTING MANDATES. SYSTEMATIZED INTELLIGENCE INPUTS AND GEOSPATIAL MATRIX REAL-TIME INGESTIONS ARE PROPRIETARY ANALYTICAL COMPILATIONS REPLICATED VIA REGISTERED PUBLIC CONTEXT ENDPOINTS [IDFM, DATA.GOUV.FR, LE PARISIEN, FRANCE 24]. THIS PLATFORM IMPLEMENTATION OPERATES FULLY INDEPENDENTLY AS A NON-ENDORSED VISUALIZATION INSTRUMENT IN ACCORDANCE WITH RELEVANT PUBLIC SECTOR RE-USE PROTOCOLS.
+        </div>
+    </div>
 </body>
 </html>
