@@ -650,11 +650,12 @@
         }
 
         /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
+        /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
         #bottom-authority-bar {
             position: fixed;
             bottom: 0;
             left: 0;
-            right: 0;
+            width: 100vw; /* Forces the bar to span the entire screen width */
             height: 65px;
             background: #07090c;
             border-top: 1px solid #1a222d;
@@ -663,14 +664,14 @@
             align-items: center;
             padding: 0 20px;
             box-sizing: border-box;
-            gap: 20px;
+            gap: 30px; /* Gives nice breathing room between logos and text */
         }
 
         .footer-logo-group {
             display: flex;
             align-items: center;
             gap: 15px;
-            flex-shrink: 0;
+            flex-shrink: 0; /* Prevents logos from getting crushed */
         }
 
         .footer-gl-main {
@@ -682,17 +683,21 @@
         .footer-logo-img {
             height: 24px;
             object-fit: contain;
-            filter: grayscale(1) brightness(0.7);
+            filter: grayscale(1) brightness(0.8);
             opacity: 0.8;
+            border-radius: 2px;
         }
 
         .footer-legal-text {
+            flex: 1; /* This is the magic line! It forces the text to stretch horizontally */
             font-family: monospace;
             font-size: 8px;
             color: #556677;
             line-height: 1.5;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
+            text-align: justify; /* Makes it look like a clean, solid block of legal text */
+            padding-right: 20px;
         }
     </style>
 </head>
@@ -1379,12 +1384,13 @@
     <div id="bottom-authority-bar">
         <div class="footer-logo-group">
             <!-- Your New Elite Round Seal -->
-            <img class="footer-gl-main" src="new logo grey lane.png" alt="Grey Lane Security Grid">            
+            <img class="footer-gl-main" src="new logo grey lane.png" alt="Grey Lane Security Grid">
+            
             <!-- Regional Media & Public Infrastructure Vector Nodes -->
-            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/2/22/France_24_logo.svg" alt="FRANCE 24 Ingestion Axis">
-            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/e/e0/Le_Parisien.svg" alt="LE PARISIEN Feed Node">
-            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/d/de/Logo_data.gouv.fr.svg" alt="DATA.GOUV REGISTRY CONTAINER">
-            <img class="footer-logo-img" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_Île-de-France_Mobilités.svg" alt="IDFM TRANSIT CORE PIPE">
+            <img class="footer-logo-img" src="https://logo.clearbit.com/france24.com" alt="FRANCE 24">
+            <img class="footer-logo-img" src="https://logo.clearbit.com/leparisien.fr" alt="LE PARISIEN">
+            <img class="footer-logo-img" src="https://logo.clearbit.com/data.gouv.fr" alt="DATA.GOUV.FR">
+            <img class="footer-logo-img" src="https://logo.clearbit.com/iledefrance-mobilites.fr" alt="IDFM">
         </div>
         
         <div class="footer-legal-text">
