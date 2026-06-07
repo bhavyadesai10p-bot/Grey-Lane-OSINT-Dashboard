@@ -16,6 +16,30 @@ import google.generativeai as genai
 # --- OFFICIAL IDFM TRANSIT API KEY ---
 IDFM_API_KEY = "oHymtFY3DTr0tdSr5jghmDe1Qaxhxn9X"
 
+# --- PARIS TRANSIT GEOLOCATION MATRIX ---
+# Maps entire lines to critical hub stations to spread alerts organically across the city
+PARIS_TRANSIT_NODES = {
+    "1": {"lat": 48.8654, "lng": 2.3211},  # Concorde (West-Central)
+    "2": {"lat": 48.8820, "lng": 2.3323},  # Pigalle (North)
+    "3": {"lat": 48.8649, "lng": 2.3985},  # Gambetta (East)
+    "4": {"lat": 48.8530, "lng": 2.3444},  # Saint-Michel (Central)
+    "5": {"lat": 48.8322, "lng": 2.3556},  # Place d'Italie (South)
+    "6": {"lat": 48.8410, "lng": 2.3190},  # Montparnasse (South-West)
+    "7": {"lat": 48.8590, "lng": 2.3580},  # Châtelet (Center-Right)
+    "8": {"lat": 48.8675, "lng": 2.3136},  # Invalides (West)
+    "9": {"lat": 48.8710, "lng": 2.3300},  # Opéra (Center-North)
+    "10": {"lat": 48.8510, "lng": 2.2980}, # Dupleix (West)
+    "11": {"lat": 48.8670, "lng": 2.3650}, # République (East-Central)
+    "12": {"lat": 48.8430, "lng": 2.3410}, # Port-Royal (South-Central)
+    "13": {"lat": 48.8800, "lng": 2.3150}, # Place de Clichy (North-West)
+    "14": {"lat": 48.8335, "lng": 2.3734}, # Bibliothèque (South-East)
+    "A": {"lat": 48.8738, "lng": 2.2950},  # RER A - Etoile
+    "B": {"lat": 48.8188, "lng": 2.3387},  # RER B - Cité U
+    "C": {"lat": 48.8533, "lng": 2.2764},  # RER C - Javel
+    "D": {"lat": 48.8809, "lng": 2.3553},  # RER D - Gare du Nord
+    "E": {"lat": 48.8768, "lng": 2.3592},  # RER E - Gare de l'Est
+}
+
 # --- AI SETUP ---
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
@@ -463,19 +487,26 @@ def fetch_idfm_transit_status():
                         lat = float(coord["lat"])
                         lon = float(coord["lon"])
                 
-                # 5. Intelligent fallback: infer department from line/station
-                if lat is None or lon is None:
-                    inferred_dept = infer_department_from_line(line_name, station_name)
-                    if inferred_dept and inferred_dept in SUBURBAN_ZONES:
-                        zone = SUBURBAN_ZONES[inferred_dept]
-                        lat = zone["lat"]
-                        lon = zone["lng"]
-                        print(f"🗺️ Mapped '{line_name}' to {zone['name']} ({inferred_dept})")
-                    else:
-                        # Ultimate fallback: default to central Paris
-                        lat = PARIS_CENTER_LAT
-                        lon = PARIS_CENTER_LNG
-                        print(f"⚠️ Could not infer location for '{line_name}' at '{station_name}', using central Paris")
+                # 5. Smart Geolocator: Try to find the line code in our matrix
+                # Extract just the line number/letter (e.g., "1", "4", "A" from "Line 1")
+                line_code = str(line_name).upper().replace("LINE ", "").strip()
+                
+                if line_code in PARIS_TRANSIT_NODES:
+                    # Drop the alert at the designated hub station for that line
+                    incident_lat = PARIS_TRANSIT_NODES[line_code]["lat"]
+                    incident_lng = PARIS_TRANSIT_NODES[line_code]["lng"]
+                else:
+                    # Fallback for minor bus/tram lines: 
+                    # Apply a deterministic mathematical scatter so they don't form a dead-center spiral
+                    import hashlib
+                    hash_val = int(hashlib.md5(line_code.encode()).hexdigest(), 16)
+                    
+                    # Creates an organic, predictable scatter around Paris based on the bus/tram name
+                    incident_lat = 48.8566 + ((hash_val % 100) - 50) * 0.001
+                    incident_lng = 2.3522 + (((hash_val // 100) % 100) - 50) * 0.001
+                
+                lat = incident_lat
+                lon = incident_lng
                 
                 # 6. Save to database
                 incident_data = {
