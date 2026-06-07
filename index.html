@@ -1060,8 +1060,22 @@
         const statusText = document.getElementById("status-text");
         const logContent = document.getElementById("log-content");
 
-        ws.onopen = function() { statusText.innerHTML = "Backend: Live & Connected"; statusText.style.color = "#00ff00"; };
-        ws.onclose = function() { statusText.innerHTML = "Backend: Disconnected (Reconnecting...)"; statusText.style.color = "#ff0000"; };
+        ws.onopen = function() { 
+            const liveDot = document.getElementById("live-dot");
+            if (liveDot) {
+                liveDot.style.background = "#00c851";
+                liveDot.style.boxShadow = "0 0 8px #00c851";
+            }
+            console.log("OSINT ENGINE: Connected to secure backend telemetry.");
+        };
+        ws.onclose = function() { 
+            const liveDot = document.getElementById("live-dot");
+            if (liveDot) {
+                liveDot.style.background = "#ff4444";
+                liveDot.style.boxShadow = "0 0 8px #ff4444";
+            }
+            console.log("OSINT ENGINE: Telemetry link severed.");
+        };
 
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
