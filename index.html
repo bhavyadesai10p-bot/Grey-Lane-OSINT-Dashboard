@@ -1,689 +1,1401 @@
-import os
-import json
-import asyncio
-import random
-import feedparser
-import re
-import sqlite3
-import requests
-import time
-from datetime import datetime, timedelta
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
-
-# --- OFFICIAL IDFM TRANSIT API KEY ---
-IDFM_API_KEY = "oHymtFY3DTr0tdSr5jghmDe1Qaxhxn9X"
-
-# --- PARIS TRANSIT GEOLOCATION MATRIX ---
-# Maps entire lines to critical hub stations to spread alerts organically across the city
-PARIS_TRANSIT_NODES = {
-    "1": {"lat": 48.8654, "lng": 2.3211},  # Concorde (West-Central)
-    "2": {"lat": 48.8820, "lng": 2.3323},  # Pigalle (North)
-    "3": {"lat": 48.8649, "lng": 2.3985},  # Gambetta (East)
-    "4": {"lat": 48.8530, "lng": 2.3444},  # Saint-Michel (Central)
-    "5": {"lat": 48.8322, "lng": 2.3556},  # Place d'Italie (South)
-    "6": {"lat": 48.8410, "lng": 2.3190},  # Montparnasse (South-West)
-    "7": {"lat": 48.8590, "lng": 2.3580},  # Châtelet (Center-Right)
-    "8": {"lat": 48.8675, "lng": 2.3136},  # Invalides (West)
-    "9": {"lat": 48.8710, "lng": 2.3300},  # Opéra (Center-North)
-    "10": {"lat": 48.8510, "lng": 2.2980}, # Dupleix (West)
-    "11": {"lat": 48.8670, "lng": 2.3650}, # République (East-Central)
-    "12": {"lat": 48.8430, "lng": 2.3410}, # Port-Royal (South-Central)
-    "13": {"lat": 48.8800, "lng": 2.3150}, # Place de Clichy (North-West)
-    "14": {"lat": 48.8335, "lng": 2.3734}, # Bibliothèque (South-East)
-    "A": {"lat": 48.8738, "lng": 2.2950},  # RER A - Etoile
-    "B": {"lat": 48.8188, "lng": 2.3387},  # RER B - Cité U
-    "C": {"lat": 48.8533, "lng": 2.2764},  # RER C - Javel
-    "D": {"lat": 48.8809, "lng": 2.3553},  # RER D - Gare du Nord
-    "E": {"lat": 48.8768, "lng": 2.3592},  # RER E - Gare de l'Est
-}
-
-# --- AI SETUP ---
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-
-SYSTEM_INSTRUCTION = """
-You are an elite OSINT geospatial intelligence parser for the Grey Lane platform in Paris. 
-Analyze the provided raw text (social media, news, or Telegram chatter) and extract the incident details into STRICT JSON format.
-
-Crucial Protest Routing Rules:
-If the text describes a moving event (e.g., a protest march, a parade, a moving riot), you MUST identify the starting location and the destination location, and output them as start_lat, start_lng, and end_lat, end_lng.
-If it is a stationary event (like a street robbery or a static gathering), set the end_lat and end_lng to the exact same values as the start_lat and start_lng.
-
-You must return ONLY a JSON object with exactly these keys:
-{
-    "category": "Choose one: CIVIL_UNREST, PROPERTY_DAMAGE, CRIME, HIGH_SECURITY",
-    "incident_type": "Short 2-3 word description (e.g., 'Moving Protest', 'Violent Riot', 'Pickpocket')",
-    "severity": "Rate 1 to 5 (5 being highly critical)",
-    "start_lat": "Latitude of the origin point (float)",
-    "start_lng": "Longitude of the origin point (float)",
-    "end_lat": "Latitude of the destination point (float) - identical to start if stationary",
-    "end_lng": "Longitude of the destination point (float) - identical to start if stationary",
-    "description": "A brief, tactical summary of the event."
-}
-"""
-
-ai_model = genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=SYSTEM_INSTRUCTION)
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        # On connection, stream the unexpired history from database
-        for incident in get_stored_incidents():
-            await websocket.send_json(incident)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except:
-                pass
-
-manager = ConnectionManager()
-PARIS_CENTER_LAT, PARIS_CENTER_LNG = 48.8566, 2.3522
-DB_FILE = "greylane_local.db"
-
-# --- SYSTEM 1: AUTOMATIC LIFETIME-FREE SQLITE DATABASE ---
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS incidents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lat REAL,
-            lng REAL,
-            category TEXT,
-            description TEXT,
-            severity TEXT,
-            ingested_at TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def store_incident(inc):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO incidents (lat, lng, category, description, severity, ingested_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (inc['lat'], inc['lng'], inc['category'], inc['description'], inc['severity'], datetime.utcnow().isoformat()))
-    conn.commit()
-    conn.close()
-
-def get_stored_incidents():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT lat, lng, category, description, severity FROM incidents")
-    rows = cursor.fetchall()
-    conn.close()
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grey Lane | Live Paris OSINT</title>
     
-    incidents = []
-    for r in rows:
-        incidents.append({
-            "event": "new_incident",
-            "incident": {"lat": r[0], "lng": r[1], "category": r[2], "description": r[3], "severity": r[4]}
-        })
-    return incidents
-
-def database_auto_scrub():
-    """Removes all tactical data older than 24 hours to prevent cluttering routing calculations"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    time_threshold = (datetime.utcnow() - timedelta(hours=24)).isoformat()
-    cursor.execute("DELETE FROM incidents WHERE ingested_at < ?", (time_threshold,))
-    deleted_count = cursor.rowcount
-    conn.commit()
-    conn.close()
-    if deleted_count > 0:
-        print(f"🧹 DATABASE AUTO-SCRUB: Cleared {deleted_count} expired threat profiles (>24h).")
-
-# --- DATA SOURCE FEEDS ---
-NEWS_FEEDS = ["https://www.france24.com/en/rss", "https://www.rfi.fr/en/france/rss"]
-TRANSIT_FEED = "https://www.asf-en-direct.fr/rss/trafic-ratp.xml" 
-
-# Hyper-Local Parisian Micro-Feeds
-MICRO_FEEDS = [
-    "https://www.leparisien.fr/paris-75/rss.xml", 
-    "https://www.lefigaro.fr/paris/rss.xml"       
-]
-
-# --- FIX B: BATCH PROCESSING ---
-async def analyze_articles_batch(articles, source_type, source_name):
-    """
-    Professional batch processing: Send 5-10 articles to Gemini in ONE call.
-    Returns array of incidents instead of 1 at a time.
-    Reduces API calls from 10 per cycle to 1 per cycle per feed!
-    """
-    if not articles:
-        return []
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
     
-    # Create article block for Gemini
-    articles_block = ""
-    for i, article in enumerate(articles):
-        articles_block += f"""
-ID: {i}
-Title: {article['title']}
-Summary: {article['summary'][:200]}
----"""
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* --- LEFT PANEL STRUCTURE --- */
+        :root {
+            --panel-w: 310px;
+            --cat-a: #ff4444;
+            --cat-b: #ff8800;
+            --cat-c: #ffcc00;
+            --cat-d: #00d2ff;
+            --cat-e: #ff00ff;
+            --border: #333;
+        }
+
+        /* --- UPDATED PANEL & MAP HEIGHTS TO CLEAR FOOTER --- */
+        #map {
+            width: calc(100% - var(--panel-w));
+            height: calc(100vh - 55px - 65px); /* Subtract top header and bottom bar */
+            z-index: 1;
+            cursor: crosshair;
+            position: fixed;
+            top: 55px;
+            left: var(--panel-w);
+        }
+
+        .panel {
+            position: fixed;
+            top: 55px;
+            left: 0;
+            width: var(--panel-w);
+            height: calc(100vh - 55px - 65px); /* Clear bottom bar height */
+            background: rgba(10, 10, 10, 0.95);
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            z-index: 999;
+            padding: 0;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #00ff00;
+            margin-top: 5px;
+        }
+
+        .log-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            height: calc(100vh - 40px - 65px); /* Clear bottom bar height */
+            background: rgba(10, 10, 10, 0.85);
+            border-right: 4px solid #00d4ff;
+            color: #fff;
+            z-index: 1000;
+            pointer-events: auto;
+            box-shadow: -4px 4px 15px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-header {
+            padding: 15px;
+            background: #111;
+            border-bottom: 1px solid #333;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #00d4ff;
+            text-align: right;
+        }
+
+        .log-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .log-content::-webkit-scrollbar { width: 4px; }
+        .log-content::-webkit-scrollbar-track { background: #000; }
+        .log-content::-webkit-scrollbar-thumb { background: #444; }
+
+        .log-entry {
+            background: #1a1a1a;
+            border-left: 3px solid;
+            padding: 10px;
+            font-size: 11px;
+            line-height: 1.4;
+            cursor: pointer;
+            animation: slideIn 0.3s ease-out;
+            transition: background 0.2s;
+        }
+        .log-entry:hover { background: #2a2a2a; }
+
+        .log-entry.high { border-color: #ff0000; color: #ffdddd; }
+        .log-entry.medium { border-color: #ffa500; color: #ffeedd; }
+        .log-entry.low { border-color: #0096ff; color: #ddf0ff; }
+        
+        .log-time {
+            font-size: 9px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .osint-marker { border-radius: 50%; border: 2px solid white; }
+        .severity-high { background-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 10px red; animation: pulse-high 1.2s infinite; }
+        .severity-medium { background-color: rgba(255, 165, 0, 0.8); box-shadow: 0 0 10px orange; animation: pulse-medium 2s infinite; }
+        .severity-low { background-color: rgba(0, 150, 255, 0.8); box-shadow: 0 0 10px #0096ff; }
+
+        @keyframes pulse-high { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
+        @keyframes pulse-medium { 0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 165, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); } }
+
+        .leaflet-popup-content-wrapper { 
+            background: #111; 
+            color: #fff; 
+            border: 1px solid #333; 
+        }
+        .leaflet-popup-tip { 
+            background: #111; 
+        }
+
+        .psec {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stitle {
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #00d2ff;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        /* Category Toggles */
+        .ctog {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 2px;
+        }
+
+        .ctog.active {
+            border-left-color: #00d2ff;
+            background: rgba(0, 210, 255, 0.1);
+        }
+
+        .ctog:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .cdot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .cname {
+            font-size: 12px;
+            color: #ddd;
+            flex-grow: 1;
+            font-family: monospace;
+        }
+
+        .ccount {
+            font-size: 11px;
+            color: #888;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        /* Severity Slider Row */
+        .srow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .slbl {
+            font-size: 10px;
+            color: #888;
+            font-family: monospace;
+            letter-spacing: 1px;
+            width: 60px;
+            flex-shrink: 0;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
+
+        .sval {
+            font-size: 12px;
+            color: #00d2ff;
+            font-family: monospace;
+            font-weight: bold;
+            width: 30px;
+            text-align: center;
+        }
+
+        /* Toggle Rows */
+        .togrow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+        }
+
+        .toglbl {
+            font-size: 12px;
+            color: #ddd;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .togsub {
+            font-size: 9px;
+            color: #888;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+
+        /* Switch Toggle */
+        .sw {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .sw input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .sw-sl {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .sw-sl:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .sw-sl {
+            background-color: #00d2ff;
+        }
+
+        input:checked + .sw-sl:before {
+            transform: translateX(20px);
+        }
+
+        /* Heatbar */
+        #heatbar-wrap {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 2px;
+            border: 1px solid #333;
+        }
+
+        #heatbar {
+            height: 20px;
+            background: linear-gradient(90deg, #2ed573, #ffcc00, #ff8800, #ff4444);
+            border-radius: 2px;
+            margin-bottom: 6px;
+        }
+
+        #hbar-label {
+            font-size: 9px;
+            color: #888;
+            font-family: monospace;
+            text-align: center;
+        }
+
+        /* Route Inputs */
+        .rte-inputs {
+            margin-bottom: 10px;
+        }
+
+        .rte-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .rdot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .rdot.from {
+            background: #2ed573;
+        }
+
+        .rdot.to {
+            background: #ff4444;
+        }
+
+        .rte-input {
+            flex-grow: 1;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #ddd;
+            padding: 6px 8px;
+            font-family: monospace;
+            font-size: 11px;
+            border-radius: 2px;
+        }
+
+        .rte-input:focus {
+            outline: none;
+            border-color: #00d2ff;
+        }
+
+        .rte-result {
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            border-radius: 2px;
+            font-size: 11px;
+            color: #ddd;
+            font-family: monospace;
+        }
+
+        .alt-routes {
+            margin-top: 8px;
+        }
+
+        /* AI Parser */
+        .ai-textarea {
+            width: 100%;
+            height: 80px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #ddd;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            resize: none;
+            border-radius: 2px;
+            margin-bottom: 8px;
+            box-sizing: border-box;
+        }
+
+        .ai-textarea:focus {
+            outline: none;
+            border-color: #00d2ff;
+        }
+
+        .btn {
+            width: 100%;
+            background: #0055ff;
+            border: 1px solid #0096ff;
+            color: #fff;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .btn:hover {
+            background: #0096ff;
+        }
+
+        .btn.danger {
+            background: #ff4444;
+            border-color: #ff6666;
+        }
+
+        .btn.danger:hover {
+            background: #ff6666;
+        }
+
+        /* Loading Spinner */
+        .pi {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .pd {
+            display: flex;
+            gap: 4px;
+        }
+
+        .pd span {
+            width: 4px;
+            height: 4px;
+            background: #00d2ff;
+            border-radius: 50%;
+            animation: pulse-dot 1.4s infinite;
+        }
+
+        .pd span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .pd span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .ai-result {
+            display: none;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .ai-result div {
+            margin-bottom: 6px;
+        }
+
+        .fk {
+            color: #00d2ff;
+            font-weight: bold;
+        }
+
+        .fv {
+            color: #ddd;
+        }
+
+        /* Transit Line Badges */
+        .strike-item {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .stk-title {
+            font-family: monospace;
+            font-size: 11px;
+            color: #ff4444;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .stk-meta {
+            font-family: monospace;
+            font-size: 9px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .stk-lines {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .lbadge {
+            display: inline-block;
+            background: #00d2ff;
+            color: #000;
+            padding: 3px 7px;
+            border-radius: 2px;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .transit-tooltip { background: rgba(10, 10, 10, 0.9); border: 1px solid #444; color: #fff; font-family: monospace; font-weight: bold; }
+        
+        /* --- TACTICAL STATION TOOLTIPS --- */
+        .tactical-station-tooltip {
+            background-color: #111 !important;
+            color: #00d2ff !important;
+            border: 1px solid #00d2ff !important;
+            font-family: monospace !important;
+            font-size: 10px !important;
+            border-radius: 2px !important;
+            box-shadow: 0 0 5px rgba(0, 210, 255, 0.3) !important;
+            padding: 4px 6px !important;
+        }
+        /* Hide the little triangle arrow Leaflet puts on tooltips */
+        .leaflet-tooltip-top.tactical-station-tooltip::before {
+            display: none !important;
+        }
+
+        /* --- TACTICAL TERMINAL SCROLLBARS --- */
+        ::-webkit-scrollbar {
+            width: 6px;  /* Ultra-thin and sleek */
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a; /* Deep terminal black */
+            border-left: 1px solid #222;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333; 
+            border-radius: 0px; /* Sharp, military edges instead of rounded */
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00d2ff; /* Glows cyan when the operator hovers over it */
+            box-shadow: 0 0 8px rgba(0, 210, 255, 0.5);
+        }
+
+        /* --- INTELLIGENCE FEED CARDS --- */
+        .log-entry {
+            background: rgba(17, 17, 17, 0.9);
+            border: 1px solid #333;
+            border-right: 2px solid #333; /* The 'sharp end' right bracket */
+            margin-bottom: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        /* Hover effect: snaps the card forward slightly when inspecting */
+        .log-entry:hover {
+            transform: translateX(4px);
+            border-color: #555;
+        }
+        /* HIGH SEVERITY: Crimson Red edge with a threat gradient */
+        .log-entry.high {
+            border-left: 4px solid #ff4444;
+            background: linear-gradient(90deg, rgba(255, 68, 68, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* MEDIUM SEVERITY: Warning Amber edge */
+        .log-entry.medium {
+            border-left: 4px solid #ffaa00;
+            background: linear-gradient(90deg, rgba(255, 170, 0, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* LOW SEVERITY: Secure Green edge */
+        .log-entry.low {
+            border-left: 4px solid #00c851;
+            background: linear-gradient(90deg, rgba(0, 200, 81, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+        /* TRANSIT & INFRASTRUCTURE: Cyan Blue edge */
+        .log-entry.transit {
+            border-left: 4px solid #00d2ff;
+            background: linear-gradient(90deg, rgba(0, 210, 255, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
+        }
+
+        /* --- COMMAND HEADER STYLING --- */
+        #top-header {
+            position: fixed; top: 0; left: 0; right: 0; height: 55px;
+            background: #0f1218; border-bottom: 1px solid #222d3d;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; z-index: 2000; box-sizing: border-box;
+        }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        
+        /* The Pulsing Live Dot */
+        #live-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #00c851;
+            box-shadow: 0 0 8px #00c851; animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px #00c851; } 50% { opacity: 0.4; box-shadow: 0 0 2px #00c851; } }
+        
+        /* Stats Block */
+        #header-stats { display: flex; align-items: center; gap: 20px; }
+        .stat-box { display: flex; flex-direction: column; align-items: center; }
+        .stat-val { font-family: monospace; font-size: 18px; color: #ddeeff; font-weight: bold; line-height: 1; }
+        .stat-lbl { font-family: monospace; font-size: 9px; color: #8899aa; letter-spacing: 1.5px; margin-top: 2px; }
+        .stat-line { width: 1px; height: 25px; background: #222d3d; }
+        
+        #header-clock { font-family: monospace; font-size: 13px; color: #00d2ff; letter-spacing: 1px; }
+        
+        /* --- TACTICAL CLUSTER OVERRIDES --- */
+        .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(0,0,0,0.6) !important; }
+        .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+            background: #151a22 !important; color: #00d2ff !important;
+            font-family: monospace !important; font-size: 12px !important; font-weight: bold;
+            border: 1px solid #00d2ff !important; box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+        }
+
+        /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
+        /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
+        #bottom-authority-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100vw; /* Forces the bar to span the entire screen width */
+            height: 65px;
+            background: #07090c;
+            border-top: 1px solid #1a222d;
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            gap: 30px; /* Gives nice breathing room between logos and text */
+        }
+
+        .footer-logo-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-shrink: 0; /* Prevents logos from getting crushed */
+        }
+
+        .footer-gl-main {
+            height: 48px;
+            border-right: 1px solid #1a222d;
+            padding-right: 15px;
+        }
+
+        .footer-logo-img {
+            height: 24px;
+            object-fit: contain;
+            filter: none;
+            opacity: 0.9;
+            border-radius: 2px;
+        }
+
+        .footer-legal-text {
+            flex: 1; /* This is the magic line! It forces the text to stretch horizontally */
+            font-family: monospace;
+            font-size: 8px;
+            color: #556677;
+            line-height: 1.5;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            text-align: justify; /* Makes it look like a clean, solid block of legal text */
+            padding-right: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-header">
+        <div class="header-left">
+            <div id="live-dot"></div>
+            <div id="logo-block" style="display: flex; align-items: baseline; gap: 6px;">
+                <span style="color: #8899aa; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">GREY</span> 
+                <span style="color: #8899aa; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">LANE</span>
+                <span style="color: #ff2d78; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; margin-left: 6px;">PARIS</span>
+                <span style="color: #00d2ff; font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px;">OSINT</span>
+            </div>
+        </div>
+        <div id="header-stats">
+            <div class="stat-box"><div class="stat-val" id="stat-active">0</div><div class="stat-lbl">ACTIVE</div></div>
+            <div class="stat-line"></div>
+            <div class="stat-box"><div class="stat-val" style="color: #ff4444;" id="stat-crit">0</div><div class="stat-lbl">CRITICAL</div></div>
+            <div class="stat-line"></div>
+            <div class="stat-box"><div class="stat-val" id="stat-transit-cnt">0</div><div class="stat-lbl">TRANSIT</div></div>
+        </div>
+        <div id="header-clock">--:--:-- CET</div>
+    </div>
+
+    <!-- LEFT PANEL (Main Project Upgrade) -->
+    <div id="panel-left" class="panel">
+
+      <!-- 1. LIVE CATEGORIES CONTROLLER -->
+      <div class="psec">
+        <div class="stitle">Categories</div>
+        <div class="ctog active" data-cat="A" onclick="toggleCat('A')"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Civil Unrest</div><div class="ccount" id="cA">0</div></div>
+        <div class="ctog active" data-cat="B" onclick="toggleCat('B')"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Property Damage</div><div class="ccount" id="cB">0</div></div>
+        <div class="ctog active" data-cat="C" onclick="toggleCat('C')"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">0</div></div>
+        <div class="ctog active" data-cat="E" onclick="toggleCat('E')"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">0</div></div>
+        <!-- Transit pushed to the bottom -->
+        <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">0</div></div>
+      </div>
+
+      <!-- 2. MAP CONTROLS & TEMPORAL MATRIX -->
+      <div class="psec">
+        <div class="stitle">Filters</div>
+        <div class="srow">
+          <div class="slbl">MIN SEV</div>
+          <input type="range" id="sev-sl" min="1" max="5" value="1" oninput="onSev(this.value)">
+          <div class="sval" id="sev-v">1</div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="togrow">
+            <div><div class="toglbl">Verified only</div><div class="togsub">Hide unconfirmed</div></div>
+            <label class="sw"><input type="checkbox" id="tog-vfd" onchange="applyFilters()"><span class="sw-sl"></span></label>
+          </div>
+          <div class="togrow">
+            <div><div class="toglbl">Transit overlay</div><div class="togsub">Métro + RER lines</div></div>
+            <label class="sw"><input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)"><span class="sw-sl"></span></label>
+          </div>
+          <div class="togrow">
+            <div><div class="toglbl">Cluster markers</div><div class="togsub">Group nearby pins</div></div>
+            <label class="sw"><input type="checkbox" id="tog-cluster" checked onchange="toggleClusterMode(this.checked)"><span class="sw-sl"></span></label>
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="slbl" style="margin-bottom:8px">TEMPORAL DENSITY</div>
+          <div id="heatbar-wrap">
+            <div id="heatbar"></div>
+            <div id="hbar-label">All 24h · <span id="hbar-active">All incidents</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. TACTICAL ROUTE SAFETY -->
+      <div class="psec">
+        <div class="stitle">Route Safety</div>
+        <div class="rte-inputs">
+          <div class="rte-row"><div class="rdot from"></div><input type="text" class="rte-input" id="rte-from" placeholder="From: click map or type"></div>
+          <div class="rte-row"><div class="rdot to"></div><input type="text" class="rte-input" id="rte-to" placeholder="To: click map or type"></div>
+        </div>
+        <button class="btn" onclick="checkRoute()">▶ CHECK ROUTE</button>
+        <div class="rte-result" id="rte-result"></div>
+        <div class="alt-routes" id="alt-routes"></div>
+      </div>
+
+      <!-- 4. INDEPENDENT AI INCIDENT PARSER -->
+      <div class="psec">
+        <div class="stitle">AI Incident Parser</div>
+        <textarea class="ai-textarea" id="ai-inp" placeholder='Paste raw social / Telegram / news text&#10;&#10;e.g. "manif bd saint-germain CRS gaz lacrymogène"'></textarea>
+        <button class="btn" onclick="parseAI()">⚡ PARSE VIA ENGINE</button>
+        <div class="pi" id="pi"><div class="pd"><span></span><span></span><span></span></div>ANALYSING...</div>
+        <div class="ai-result" id="ai-res"></div>
+        <button class="btn danger" id="ai-add" style="display:none;margin-top:6px" onclick="addParsed()">＋ ADD TO MAP</button>
+      </div>
+
+      <!-- 5. REAL-TIME TRANSIT LINE BADGES (Pinned to Bottom) -->
+      <div class="psec">
+        <div class="stitle">Active Line Operations</div>
+        <div id="live-strike-calendar">
+          <!-- Generated Dynamically from your IDFM Backend Pipeline -->
+        </div>
+      </div>
+
+    </div>
+
+    <div class="log-panel">
+        <div class="log-header">▶ LIVE INTELLIGENCE LOG</div>
+        <div class="log-content" id="log-content"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     
-    prompt = f"""
-Analyze this batch of {len(articles)} articles for incidents in the Paris/Île-de-France region.
-Return a JSON array of objects with ONLY the relevant articles.
+    <script>
+        const map = L.map('map', {
+            center: [48.8566, 2.3522], 
+            zoom: 13,
+            zoomControl: false
+        });
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-Articles:
-{articles_block}
+        // --- LIVE CLOCK ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('header-clock').innerText = now.toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false}) + ' CET';
+        }, 1000);
+        // --- TACTICAL CLUSTER GROUP ---
+        const masterCluster = L.markerClusterGroup({
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true
+        });
+        map.addLayer(masterCluster);
 
-For each relevant article, respond with:
-{{"id": 0, "relevant_to_paris": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "TRANSIT"}}
+        // --- TACTICAL DATA LAYERS ---
+        const transitLayer = L.layerGroup().addTo(map);
+        let isTransitVisible = true;
 
-Return ONLY a JSON array, no markdown. If no articles are relevant, return [].
-Example:
-[{{"id": 1, "relevant_to_paris": true, "lat": 48.9356, "lng": 2.3539, "severity": "high", "category": "PROTEST"}}]
-"""
-    
-    try:
-        print(f"🚀 Batch analyzing {len(articles)} articles from {source_name}...")
-        response = await asyncio.to_thread(ai_model.generate_content, prompt)
-        
-        print(f"🕵️ BATCH GEMINI RAW OUTPUT:\n{response.text}\n---")
-        
-        raw_json = response.text.strip()
-        if "[" in raw_json:
-            raw_json = raw_json[raw_json.find("["):raw_json.rfind("]")+1]
-        
-        print(f"🕵️ EXTRACTED BATCH JSON: {raw_json}")
-        
-        batch_results = json.loads(raw_json)
-        if not isinstance(batch_results, list):
-            batch_results = [batch_results]
-        
-        print(f"🕵️ PARSED BATCH SUCCESS: {len(batch_results)} relevant articles")
-        
-        # Process each result
-        incidents = []
-        for result in batch_results:
-            if not result.get("relevant_to_paris", False):
-                continue
-            
-            article_id = result.get("id", 0)
-            if article_id >= len(articles):
-                continue
-            
-            article = articles[article_id]
-            lat = float(result.get("lat", PARIS_CENTER_LAT))
-            lng = float(result.get("lng", PARIS_CENTER_LNG))
-            
-            incident_data = {
-                "lat": lat,
-                "lng": lng,
-                "category": result.get("category", "SECURITY").upper(),
-                "description": f"<b>📰 {source_type} BATCH: {article['title']}</b><br><br>{article['summary'][:160]}...<br><br>Source: {source_name}",
-                "severity": result.get("severity", "medium").lower()
+        // The Master Switch Function
+        function toggleTransit(isChecked) {
+            const checkbox = document.getElementById('tog-transit');
+            if (isChecked !== undefined) {
+                // Called from checkbox onchange
+                isTransitVisible = isChecked;
+            } else {
+                // Called from code
+                isTransitVisible = !isTransitVisible;
+                if (checkbox) checkbox.checked = isTransitVisible;
             }
             
-            store_incident(incident_data)
-            incidents.append(incident_data)
-            
-            payload = {"event": "new_incident", "incident": incident_data}
-            await manager.broadcast(payload)
-            print(f"📍 BATCH AI DROP: [{incident_data['category']}] saved & dispatched.")
-        
-        return incidents
-        
-    except json.JSONDecodeError as je:
-        print(f"❌ BATCH JSON PARSE FAILED: {je}")
-        print(f"   Raw text was: {response.text[:200]}")
-        return []
-    except Exception as e:
-        print(f"⚠️ Batch processing failed: {type(e).__name__}: {e}")
-        return []
+            if (isTransitVisible) {
+                map.addLayer(transitLayer);
+            } else {
+                map.removeLayer(transitLayer);
+            }
+        } 
 
-async def process_raw_report(title, description, source_type, source_name):
-    clean_text = re.sub(r'<[^>]+>', ' ', title + " " + description).strip()
-    
-    # 1. Duplicate check
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM incidents WHERE description LIKE ?", (f"%{clean_text[:20]}%",))
-    exists = cursor.fetchone()[0]
-    conn.close()
-    
-    if exists or len(clean_text) < 10:
-        return
+        // --- 🚇 OFFICIAL PARIS RAIL NETWORK (IDFM OPEN DATA) ---
+        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/traces-du-reseau-ferre-idf/exports/geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: function (feature) {
+                        // IDFM often provides the official hex color. If missing, default to a dark tactical grey.
+                        let props = feature.properties;
+                        let rawColor = props.colourweb_hexa || props.couleur_hexa || props.route_color || '333333'; 
+                        let cleanColor = rawColor.replace('#', ''); // Ensure no double hash
+                        
+                        return {
+                            color: `#${cleanColor}`,
+                            weight: 2,
+                            opacity: 0.4 // Kept dim so your glowing blue alerts stand out on top!
+                        };
+                    }
+                }).addTo(transitLayer); // This attaches the entire grid to your [TRANSIT: ON/OFF] button!
+            })
+            .catch(error => console.error("Geospatial routing error:", error));
 
-    # 2. KEYWORD SHIELD: Pre-filter text to protect free tier daily limits
-    # Now accepts broader urban incidents: accidents, construction, property damage, gatherings, etc.
-    security_keywords = [
-        # Protests & civil unrest
-        "protest", "manifestation", "strike", "grève", "riot", "émeute", "march", "défilé",
-        # Law enforcement & crime
-        "police", "gendarmerie", "pompiers", "attack", "agression", "arrest", "interpellé",
-        "stolen", "vol", "cambriolage", "robbery", "braquage", "crime", "délit",
-        # Accidents & incidents
-        "accident", "crash", "collision", "choc", "blessé", "injured", "fatality", "mort",
-        "incident", "emergency", "secours", "urgence", "sapeurs-pompiers",
-        # Property damage & vandalism
-        "damage", "dégât", "destruction", "vandal", "dégradation", "broken", "cassé",
-        "fire", "incendie", "explosion", "effondrement", "collapse",
-        # Traffic & transit
-        "transit", "trafic", "métro", "metro", "rer", "bus", "tram", "traffic", "congestion",
-        "fermé", "closed", "suspendu", "suspended", "delayed", "retard", "panne", "breakdown",
-        # Construction & urban works
-        "construction", "travaux", "roadwork", "chantier", "road closure", "fermeture",
-        "maintenance", "entretien", "repair", "réparation",
-        # Gatherings & events
-        "gathering", "assembly", "rassemblement", "event", "événement", "festival",
-        # General urban terms (keep map active)
-        "paris", "île-de-france", "region", "région", "incident", "alert", "alerte",
-        "security", "sécurité", "suspect", "risk", "risque", "danger", "emergency", "urgence"
-    ]
-    
-    combined_lower = (title + " " + description).lower()
-    has_keyword = any(keyword in combined_lower for keyword in security_keywords)
-    
-    if not has_keyword:
-        return
+        // --- 🚉 OFFICIAL PARIS STATIONS (IDFM OPEN DATA) ---
+        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/gares-et-stations-du-reseau-ferre-d-ile-de-france/exports/geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    // pointToLayer tells Leaflet how to draw point data (stations)
+                    pointToLayer: function (feature, latlng) {
+                        return L.circleMarker(latlng, {
+                            radius: 4.5,          // Nearly doubled the size for clear visibility
+                            fillColor: "#111111", // Dark center makes it a sleek hollow ring
+                            color: "#ffffff",     // Bright white border to pop against the dark map
+                            weight: 1.5,          // Slightly thicker line
+                            opacity: 1,
+                            fillOpacity: 1
+                        });
+                    },
+                    // onEachFeature attaches the name tooltip to every single station
+                    onEachFeature: function (feature, layer) {
+                        // IDFM stores the name in 'nom_long' or 'nom_gare'
+                        let stationName = feature.properties.nom_long || feature.properties.nom_gare || "Station";
+                        layer.bindTooltip(`[ ${stationName} ]`, {
+                            direction: 'top',
+                            className: 'tactical-station-tooltip',
+                            opacity: 0.9
+                        });
+                    }
+                }).addTo(transitLayer); // Attaches to your Master Switch!
+            })
+            .catch(error => console.error("Station loading error:", error));
 
-    # 3. AI Analysis Block
-    print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
 
-    prompt = f"""
-    Analyze this urban incident report from the Paris/Île-de-France region:
-    Title: "{title}"
-    Description: "{description}"
-    Source Type: {source_type}
+        // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
+        // Format: [Latitude, Longitude, Intensity 0.0 to 1.0]
+        const parisRedZones = [
+            [48.8809, 2.3553, 1.0], // Gare du Nord (Aggressive pickpocketing)
+            [48.8867, 2.3431, 0.9], // Sacré-Cœur/Montmartre (String bracelet scam, pickpockets)
+            [48.8584, 2.2945, 0.85], // Eiffel Tower Base (Distraction theft)
+            [48.8606, 2.3376, 0.8], // Louvre Museum entry points (Professional rings)
+            [48.8625, 2.3475, 0.75], // Châtelet-Les Halles underground (Muggings, transit theft)
+            [48.8708, 2.3051, 0.7], // Champs-Élysées (Luxury theft, distraction)
+            [48.8768, 2.3592, 0.65], // Gare de l'Est (Luggage theft)
+            [48.8529, 2.3500, 0.6]  // Notre Dame area (Tourist distraction)
+        ];
 
-    Determine if this event impacts daily urban life, safety, logistics, or infrastructure in the region.
-    Accept: accidents, arrests, property damage, construction, transit issues, gatherings, etc.
-    Do NOT restrict to violent crises only.
-    
-    Extract the precise location (latitude/longitude) if mentioned. If no exact location is named, 
-    use Paris center (48.8566, 2.3522) and set exact_location_found to false.
-    
-    Classify severity as: low, medium, or high.
-    Classify category as one of: PROTEST, DAMAGE, CRIME, TRANSIT, SECURITY.
+        // Create the heat layer with tactical visual settings
+        const threatHeatLayer = L.heatLayer(parisRedZones, {
+            radius: 35,
+            blur: 25,
+            maxZoom: 15,
+            gradient: {0.4: '#ffed4a', 0.65: '#fa8231', 1.0: '#eb3b5a'} // Tactical Yellow -> Orange -> Red
+        });
 
-    Respond ONLY with valid JSON. No markdown, no explanations:
-    {{"relevant_to_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "TRANSIT"}}
-    """
-
-    try:
-        response = await asyncio.to_thread(ai_model.generate_content, prompt)
-        
-        # 🕵️ DIAGNOSTIC: Print exactly what Gemini returned
-        print(f"🕵️ GEMINI RAW OUTPUT:\n{response.text}\n---")
-        
-        raw_json = response.text.strip()
-        if "{" in raw_json: 
-            raw_json = raw_json[raw_json.find("{"):raw_json.rfind("}")+1]
-        
-        print(f"🕵️ EXTRACTED JSON: {raw_json}")
-        
-        ai_data = json.loads(raw_json)
-        print(f"🕵️ PARSED JSON SUCCESS: {ai_data}")
-        
-        if not ai_data.get("relevant_to_paris", False):
-            print(f"⏭️ Skipped: Not relevant to Paris")
-            return
-            
-        lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
-        lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
-        
-        if not ai_data.get("exact_location_found", False):
-            lat += random.uniform(-0.005, 0.005)
-            lng += random.uniform(-0.005, 0.005)
-
-        incident_data = {
-            "lat": lat, 
-            "lng": lng, 
-            "category": ai_data.get("category", source_type).upper(),
-            "description": f"<b>🚨 {source_type} ALERT: {title}</b><br><br>{description[:160]}...<br><br>Source: {source_name}",
-            "severity": ai_data.get("severity", "medium").lower()
+        function toggleHeatmap(isOn) {
+            if (isOn) {
+                map.addLayer(threatHeatLayer);
+            } else {
+                map.removeLayer(threatHeatLayer);
+            }
         }
-        
-        store_incident(incident_data)
-        
-        payload = {"event": "new_incident", "incident": incident_data}
-        await manager.broadcast(payload)
-        print(f"📍 REAL-TIME AI DROP: [{incident_data['category']}] saved & dispatched.")
-        
-    except json.JSONDecodeError as je:
-        print(f"❌ JSON PARSE FAILED: {je}")
-        print(f"   Raw text was: {response.text[:200]}")
-    except Exception as e:
-        print(f"⚠️ Intel processing skipped: {type(e).__name__}: {e}")
 
-# --- SUBURBAN COORDINATE FALLBACKS ---
-# Map transit lines/zones to their appropriate suburban department coordinates
-SUBURBAN_ZONES = {
-    # Department 92 (Hauts-de-Seine): La Défense, Nanterre, Boulogne
-    92: {"name": "La Défense / Nanterre", "lat": 48.8924, "lng": 2.2362},
-    # Department 93 (Seine-Saint-Denis): Saint-Denis, Roissy-CDG, Aulnay
-    93: {"name": "Saint-Denis / Roissy", "lat": 48.9356, "lng": 2.3539},
-    # Department 94 (Val-de-Marne): Créteil, Vitry, Champigny
-    94: {"name": "Créteil / Vitry", "lat": 48.7831, "lng": 2.4534},
-    # Department 95 (Val-d'Oise): Cergy, Pontoise, Roissy North
-    95: {"name": "Cergy / Pontoise", "lat": 49.0187, "lng": 2.0669},
-    # Department 77 (Seine-et-Marne): Meaux, Fontainebleau, East suburbs
-    77: {"name": "Meaux / Fontainebleau", "lat": 48.9564, "lng": 2.8837},
-    # Department 78 (Yvelines): Versailles, Saint-Germain, West suburbs
-    78: {"name": "Versailles / Saint-Germain", "lat": 48.8041, "lng": 2.1007},
-    # Department 91 (Essonne): Évry, Corbeil, South suburbs
-    91: {"name": "Évry / Corbeil", "lat": 48.6292, "lng": 2.4413},
-    # Central Paris (75) - fallback if department unknown
-    75: {"name": "Central Paris", "lat": 48.8566, "lng": 2.3522},
-}
+        let activeIncidents = []; 
+        let routeLayer = L.layerGroup().addTo(map);
+        let inputMode = 'from', coordFrom = null, coordTo = null;
 
-def infer_department_from_line(line_name, station_name):
-    """
-    Intelligently map transit lines/stations to their department zone.
-    Returns the department code (75-95) or None if unknown.
-    """
-    combined = f"{line_name} {station_name}".upper()
-    
-    # RER & Train line mappings
-    rer_dept_map = {
-        "RER A": 92,  # Passes through La Défense
-        "RER B": 93,  # Passes through Roissy
-        "RER C": 75,  # South/Central
-        "RER D": 93,  # Saint-Denis direction
-        "RER E": 75,  # Central
-        "RER H": 75,  # Central
-        "TRANSILIEN": 77,  # East/Southeast
-        "TER": 77,  # Regional trains - east
-    }
-    
-    # Suburban station keywords → department
-    station_dept_map = {
-        "DÉFENSE": 92, "NANTERRE": 92, "BOULOGNE": 92, "LEVALLOIS": 92,
-        "DENIS": 93, "ROISSY": 93, "AULNAY": 93, "MONTREUIL": 93,
-        "CRÉTEIL": 94, "VITRY": 94, "CHAMPIGNY": 94, "IVRY": 94,
-        "CERGY": 95, "PONTOISE": 95, "GONESSE": 95,
-        "VERSAILLES": 78, "SAINT-GERMAIN": 78, "MARLY": 78,
-        "ÉVRY": 91, "CORBEIL": 91, "ESSONNE": 91,
-        "MEAUX": 77, "FONTAINEBLEAU": 77, "SEINE-ET-MARNE": 77,
-    }
-    
-    # Check RER/Line patterns
-    for line_pattern, dept in rer_dept_map.items():
-        if line_pattern in combined:
-            return dept
-    
-    # Check station keywords
-    for station_keyword, dept in station_dept_map.items():
-        if station_keyword in combined:
-            return dept
-    
-    return None  # Unknown - will use default Paris
+        map.on('click', function(e) {
+            const ll = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+            if (inputMode === 'from') {
+                coordFrom = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('rte-from').value = "🎯 " + ll;
+                inputMode = 'to';
+                document.getElementById('rte-from').style.borderColor = '#444';
+                document.getElementById('rte-to').style.borderColor = '#00d4ff';
+            } else if (inputMode === 'to') {
+                coordTo = [e.latlng.lat, e.latlng.lng];
+                document.getElementById('rte-to').value = "🎯 " + ll;
+                inputMode = null;
+                document.getElementById('rte-to').style.borderColor = '#444';
+            }
+        });
 
-# --- IDFM OFFICIAL TRANSIT API ---
-def fetch_idfm_transit_status():
-    """Queries the official IDFM API, parses disruptions, and saves them to the database.
-    Now intelligently maps suburban transit to appropriate coordinates instead of centralizing."""
-    print("🚇 Polling IDFM Official Transit API...")
-    url = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/disruptions"
-    headers = {"apiKey": IDFM_API_KEY}
-    
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            disruptions = data.get("disruptions", [])
-            print(f"✅ IDFM API Success: Analyzing {len(disruptions)} active transit alerts.")
-            
-            for dist in disruptions:
-                # 1. Extract the core message
-                messages = dist.get("messages", [])
-                if not messages:
-                    continue
-                text_alert = messages[0].get("text", "Transit Disruption")
-                
-                # 2. Extract severity and set category
-                severity = dist.get("severity", {}).get("name", "warning")
-                category = "TRANSIT"
-                
-                # 3. Extract line/route info for intelligent department mapping
-                line_name = ""
-                station_name = ""
-                impacted = dist.get("impacted_objects", [])
-                
-                if impacted:
-                    pt_object = impacted[0].get("pt_object", {})
-                    
-                    # Try to get line information
-                    if "line" in pt_object:
-                        line_name = pt_object["line"].get("name", "")
-                    
-                    # Try to get stop/station information
-                    stop_area = pt_object.get("stop_area", {})
-                    if stop_area:
-                        station_name = stop_area.get("name", "")
-                
-                # 4. Try to extract actual coordinates from API
-                lat, lon = None, None
-                if impacted:
-                    pt_object = impacted[0].get("pt_object", {})
-                    stop_area = pt_object.get("stop_area", {})
-                    coord = stop_area.get("coord", {})
-                    if coord and "lat" in coord and "lon" in coord:
-                        lat = float(coord["lat"])
-                        lon = float(coord["lon"])
-                
-                # 5. Smart Geolocator: Try to find the line code in our matrix
-                # Extract just the line number/letter (e.g., "1", "4", "A" from "Line 1")
-                line_code = str(line_name).upper().replace("LINE ", "").strip()
-                
-                if line_code in PARIS_TRANSIT_NODES:
-                    # Drop the alert at the designated hub station for that line
-                    incident_lat = PARIS_TRANSIT_NODES[line_code]["lat"]
-                    incident_lng = PARIS_TRANSIT_NODES[line_code]["lng"]
-                else:
-                    # Fallback for minor bus/tram lines: 
-                    # Apply a deterministic mathematical scatter so they don't form a dead-center spiral
-                    import hashlib
-                    hash_val = int(hashlib.md5(line_code.encode()).hexdigest(), 16)
-                    
-                    # Creates an organic, predictable scatter around Paris based on the bus/tram name
-                    incident_lat = 48.8566 + ((hash_val % 100) - 50) * 0.001
-                    incident_lng = 2.3522 + (((hash_val // 100) % 100) - 50) * 0.001
-                
-                lat = incident_lat
-                lon = incident_lng
-                
-                # 6. Save to database
-                incident_data = {
-                    "lat": lat,
-                    "lng": lon,
-                    "category": category,
-                    "description": f"[IDFM] {text_alert}<br><strong>Line:</strong> {line_name}",
-                    "severity": severity
+        document.getElementById('rte-from').onclick = () => { inputMode = 'from'; document.getElementById('rte-from').style.borderColor = '#00d4ff'; document.getElementById('rte-to').style.borderColor = '#444'; };
+        document.getElementById('rte-to').onclick = () => { inputMode = 'to'; document.getElementById('rte-to').style.borderColor = '#00d4ff'; document.getElementById('rte-from').style.borderColor = '#444'; };
+
+        async function calculateRoute() {
+            if (!coordFrom || !coordTo) {
+                alert("OSINT SYSTEM: Please click on the map twice to set an Origin and Destination.");
+                return;
+            }
+            routeLayer.clearLayers();
+            const resBox = document.getElementById('rte-result');
+            resBox.style.display = 'block';
+            resBox.style.background = '#222';
+            resBox.style.border = '1px solid #444';
+            resBox.style.color = '#fff';
+            resBox.innerHTML = '⏳ Satellite calculating street route...';
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordFrom[1]},${coordFrom[0]};${coordTo[1]},${coordTo[0]}?overview=full&geometries=geojson`;
+            try {
+                const response = await fetch(osrmUrl);
+                const data = await response.json();
+                if (data.code !== 'Ok') {
+                    resBox.innerHTML = '❌ ROUTE FAILED: Cannot find valid street path.';
+                    return;
                 }
-                store_incident(incident_data)
+                const routeGeoJSON = data.routes[0].geometry;
+                const realRouteLine = L.geoJSON(routeGeoJSON, {
+                    style: { color: '#00d4ff', weight: 4, opacity: 0.8 }
+                }).addTo(routeLayer);
+                L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
+                L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
+                map.fitBounds(realRouteLine.getBounds(), {padding: [50, 50]});
+                const dangerZone = realRouteLine.getBounds().pad(0.015);
+                const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
+                if (threatsOnRoute.length === 0) {
+                    resBox.style.background = 'rgba(0, 255, 0, 0.1)';
+                    resBox.style.border = '1px solid #00ff00';
+                    resBox.style.color = '#00ff00';
+                    resBox.innerHTML = '✓ PATH CLEAR.<br>No live threats detected on this street route.';
+                } else {
+                    resBox.style.background = 'rgba(255, 0, 0, 0.1)';
+                    resBox.style.border = '1px solid #ff4757';
+                    resBox.style.color = '#ff4757';
+                    resBox.innerHTML = `⚠ WARNING: <b>${threatsOnRoute.length} hazard(s)</b> detected intersecting your street path.`;
+                    threatsOnRoute.forEach(threat => {
+                        L.circle([threat.lat, threat.lng], {radius: 300, color: '#ff0000', fillOpacity: 0.2, weight: 1})
+                        .addTo(routeLayer)
+                        .bindTooltip("THREAT RADIUS", {permanent: false});
+                    });
+                }
+            } catch (error) {
+                resBox.innerHTML = '❌ SATELLITE OFFLINE: Routing engine unreachable.';
+            }
+        }
+
+        const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
+        const ws = new WebSocket(wsUrl);
+        const statusText = document.getElementById("status-text");
+        const logContent = document.getElementById("log-content");
+
+        ws.onopen = function() { statusText.innerHTML = "Backend: Live & Connected"; statusText.style.color = "#00ff00"; };
+        ws.onclose = function() { statusText.innerHTML = "Backend: Disconnected (Reconnecting...)"; statusText.style.color = "#ff0000"; };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.event === "new_incident") {
+                const inc = data.incident;
+                activeIncidents.push(inc);
+                if(activeIncidents.length > 50) activeIncidents.shift(); 
+                // --- LIVE HEADER STATS ENGINE ---
+                // 1. Update total active incidents
+                document.getElementById('stat-active').innerText = activeIncidents.length;
                 
-            return disruptions
-        else:
-            print(f"⚠️ IDFM API Error: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"⚠️ IDFM Connection Error: {e}")
-        return []
+                // 2. Count and update Critical (High Severity) incidents
+                let critCount = activeIncidents.filter(item => (item.severity || '').toLowerCase() === 'high').length;
+                document.getElementById('stat-crit').innerText = critCount;
+                
+                // 3. Count and update Transit disruptions
+                let transitCount = activeIncidents.filter(item => item.category === 'TRANSIT').length;
+                document.getElementById('stat-transit-cnt').innerText = transitCount;
+                let sevClass = inc.severity.toLowerCase() === "high" ? "severity-high" : (inc.severity.toLowerCase() === "medium" ? "severity-medium" : "severity-low");
+                // --- CUSTOM TACTICAL STYLING ENGINE ---
+                let customClass = `osint-marker ${sevClass}`;
+                let mSize = 14;
+                let customHtml = '';
+                let isTransit = false;
+                let markerColor = '#00ffff';
+                let borderColor = '#ffffff';
+                
+                // Differentiate between TRANSIT and NEWS sources
+                if (inc.category === 'TRANSIT') {
+                    isTransit = true;
+                    mSize = 12;
+                    markerColor = '#00d2ff';
+                    customHtml = '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>';
+                } else if (inc.source_type === 'micro_news' || inc.source_type === 'macro_news') {
+                    // News markers: Color-code by severity
+                    if (inc.severity.toLowerCase() === 'high') {
+                        markerColor = '#ff2d78';
+                        mSize = 10;
+                    } else if (inc.severity.toLowerCase() === 'medium') {
+                        markerColor = '#ffa502';
+                        mSize = 8;
+                    } else {
+                        markerColor = '#2ed573';
+                        mSize = 7;
+                    }
+                    customHtml = `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.8; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
+                }
+                // Create the marker
+                const marker = L.marker([inc.lat, inc.lng], { 
+                    icon: L.divIcon({
+                        className: customClass, 
+                        html: customHtml,
+                        iconSize: [mSize, mSize], 
+                        iconAnchor: [mSize/2, mSize/2]
+                    }) 
+                });
+                marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
+                
+                // 🚨 THE CRITICAL SPLIT: Prevent news from mixing with transit clusters
+                if (inc.source_type === 'micro_news' || inc.source_type === 'macro_news') {
+                    // Drop news dots STRAIGHT onto the main map so they NEVER cluster or mix with transit
+                    marker.addTo(map); 
+                } else {
+                    // Keep transit dots inside your existing cluster group
+                    marker.addTo(masterCluster); 
+                }
+                
+                // --- THE TACTICAL IMPACT RADIUS ---
+                marker.on('click', () => {
+                    // 1. Erase the previous impact zone if one exists
+                    if (window.activeImpactZone) {
+                        map.removeLayer(window.activeImpactZone);
+                    }
+                    
+                    // 2. Determine the color (Cyan for transit, Severity color for news/crime)
+                    let zoneColor = isTransit ? '#00d2ff' : (inc.severity.toLowerCase() === "high" ? "#ff4444" : "#ffcc00");
+                    
+                    // 3. Draw a 500-meter tactical ring
+                    window.activeImpactZone = L.circle([inc.lat, inc.lng], {
+                        radius: 500, // 500 meters
+                        color: zoneColor,
+                        weight: 2,
+                        dashArray: "5, 8", // Creates a military-style dashed border
+                        fillColor: zoneColor,
+                        fillOpacity: 0.1
+                    }).addTo(map);
+                });
+
+                const timeString = new Date().toLocaleTimeString([], { hour12: false });
+                const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${inc.severity.toLowerCase()}`;
+                logEntry.innerHTML = `
+                    <div class="log-time">[${timeString}] SYSTEM DROP</div>
+                    <strong style="color: #fff;">[ ${inc.category} ]</strong><br>
+                    ${shortDesc}
+                `;
+                logEntry.onclick = () => {
+                    // Zoom out slightly to zoom level 15 so we can see the whole 500m radius
+                    map.flyTo([inc.lat, inc.lng], 15, { animate: true, duration: 1.5 });
+                    marker.openPopup();
+                    marker.fire('click'); // This fires the impact radius we just built!
+                };
+                logContent.prepend(logEntry);
+                if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
+            }
+        };
+
+        // ══════════════════════════════════════════════════════════
+        // ROUTE SAFETY & ACTIVE RISK ZONE SCANNER
+        // ══════════════════════════════════════════════════════════
+        let routePoints = [];
+        // Listen for clicks on the map to draw the route
+        map.on('click', function(e) {
+            // If there are already 2 points, clear the map for a new route
+            if (routePoints.length >= 2) {
+                routePoints = []; 
+                routeLayer.clearLayers();
+                document.getElementById('route-status').innerHTML = '';
+            }
+            
+            // Save the clicked coordinate
+            routePoints.push([e.latlng.lat, e.latlng.lng]);
+            
+            // Draw a tactical marker (Green for Start, Red for Destination)
+            L.circleMarker([e.latlng.lat, e.latlng.lng], {
+                radius: 6, 
+                color: routePoints.length === 1 ? '#00c851' : '#ff4444', 
+                fillColor: routePoints.length === 1 ? '#00c851' : '#ff4444', 
+                fillOpacity: 0.8
+            }).addTo(routeLayer);
+            // If we have both points, trigger the scan!
+            if (routePoints.length === 2) {
+                scanRoute();
+            }
+        });
+        function scanRoute() {
+            // 1. Draw the proposed travel path
+            const routeLine = L.polyline(routePoints, {
+                color: '#ffaa00', 
+                weight: 3, 
+                dashArray: '5, 8'
+            }).addTo(routeLayer);
+            
+            // 2. Create a "Blast Radius" bounding box around the path
+            const scanZone = routeLine.getBounds().pad(0.015); // Adds a geographic buffer around the line
+            
+            // 3. Filter your live feed to see if any dots fall inside the scan zone
+            const threats = activeIncidents.filter(inc => scanZone.contains([inc.lat, inc.lng]));
+            
+            // 4. Report the findings to the UI
+            const statusDiv = document.getElementById('route-status');
+            
+            if (threats.length === 0) {
+                statusDiv.innerHTML = '<div style="color: #00c851; padding: 10px; border: 1px solid #00c851; background: rgba(0,200,81,0.1); border-radius: 3px;">✓ PATH CLEAR.<br>No Active Risk Zones detected on this vector.</div>';
+            } else {
+                statusDiv.innerHTML = `<div style="color: #ff4444; padding: 10px; border: 1px solid #ff4444; background: rgba(255,68,68,0.1); border-radius: 3px;">⚠️ WARNING: <b>${threats.length} Active Risk Zones</b> detected near this path. Proceed with extreme caution.</div>`;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // LEFT PANEL CONTROL WIRING
+        // ══════════════════════════════════════════════════════════
         
-# --- TRACKER LOOPS ---
-async def scrape_transit_data():
-    """
-    Fetches real-time transit disruptions from RATP and IDFM.
-    Runs first so transport updates hit the map instantly.
-    """
-    print("🚇 Polling IDFM Official Transit API...")
-    fetch_idfm_transit_status()
-    
-    print("🚇 Scraping Local Paris Transit Disruption Streams...")
-    try:
-        transit_feed = feedparser.parse(TRANSIT_FEED)
-        if transit_feed.entries:
-            for entry in reversed(transit_feed.entries[:10]):
-                await process_raw_report(
-                    getattr(entry, 'title', ''), 
-                    getattr(entry, 'description', ''), 
-                    "TRANSIT", 
-                    "RATP Live Traffic"
-                )
-    except Exception as e:
-        print(f"⚠️ Transit feed error: {e}")
-    
-    print("✅ Transit data synchronized.")
+        let allLoadedMarkers = [];
+        let activeCategoryFilters = { A: true, B: true, C: true, D: true, E: true };
+        let minSeverityFilter = 1;
 
-async def scrape_intelligence_feeds():
-    """
-    Fetches and analyzes macro news and hyper-local Paris intel.
-    
-    TWO MODES:
-    - Fix A (Current): Individual articles with 2-second delays
-    - Fix B (Commented): Batch processing for 10x fewer API calls
-    
-    To upgrade to Fix B batch mode, uncomment the batch section below.
-    """
-    
-    print("📰 Scraping Macro French News Feeds...")
-    for feed_url in NEWS_FEEDS:
-        try:
-            feed = feedparser.parse(feed_url)
-            if feed.entries:
-                # --- FIX A MODE (CURRENT) ---
-                for entry in reversed(feed.entries[:5]):
-                    await process_raw_report(
-                        getattr(entry, 'title', ''), 
-                        getattr(entry, 'description', ''), 
-                        "NEWS", 
-                        "France24" if "france24" in feed_url else "RFI"
-                    )
-                    # 🚨 FIX A: 2-second breathing room to prevent 429 rate limit errors
-                    await asyncio.sleep(2)
+        // Connect WebSocket data directly into left panel DOM elements
+        const originalOnMessage = ws.onmessage;
+        ws.onmessage = function(event) {
+            const incomingData = JSON.parse(event.data);
+            
+            // 1. If it's transit alert payload data, update our Operations Badges
+            if (incomingData.source_type === 'transit_api_payload' && incomingData.alerts) {
+                renderDynamicLineAlerts(incomingData.alerts);
+            }
+            
+            // 2. Call original message handler
+            originalOnMessage.call(ws, event);
+            
+            // 3. Dynamically recount layout totals for Categories counters
+            updateLiveCategoryBadges();
+        };
+
+        function renderDynamicLineAlerts(alerts) {
+            const container = document.getElementById('live-strike-calendar');
+            if (!container || !alerts) return;
+            // Map out real lines (e.g. M1, RER A) into badge components
+            container.innerHTML = alerts.slice(0, 4).map(alert => {
+                // Automatically isolate the code identifiers (e.g., "1", "A", "13")
+                const lineBadge = alert.line_code ? `<span class="lbadge">${alert.line_mode === 'metro' ? 'M' : ''}${alert.line_code}</span>` : '';
                 
-                # --- FIX B MODE (UPGRADE - uncomment to enable) ---
-                # Collect articles for batch processing
-                # articles = []
-                # for entry in reversed(feed.entries[:5]):
-                #     articles.append({
-                #         "title": getattr(entry, 'title', ''),
-                #         "summary": getattr(entry, 'description', '')
-                #     })
-                # source_name = "France24" if "france24" in feed_url else "RFI"
-                # await analyze_articles_batch(articles, "NEWS", source_name)
-                # await asyncio.sleep(2)  # Still wait between batch calls
+                return `
+                    <div class="strike-item">
+                        <div class="stk-title">${alert.title || 'Transit Disruption'}</div>
+                        <div class="stk-meta">Severity ${alert.severity} · Status: Active</div>
+                        <div class="stk-lines">${lineBadge}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateLiveCategoryBadges() {
+            // Collect all active layers from your running arrays and push innerText values
+            ['A', 'B', 'C', 'D', 'E'].forEach(cat => {
+                const count = activeIncidents.filter(m => {
+                    // Map incident categories to letter codes
+                    let catCode = 'A';
+                    if (m.category === 'PROPERTY_DAMAGE') catCode = 'B';
+                    if (m.category === 'CRIME') catCode = 'C';
+                    if (m.category === 'TRANSIT') catCode = 'D';
+                    if (m.category === 'SECURITY') catCode = 'E';
+                    return catCode === cat;
+                }).length;
+                const element = document.getElementById('c' + cat);
+                if (element) element.textContent = count;
+            });
+        }
+
+        function toggleCat(cat) {
+            activeCategoryFilters[cat] = !activeCategoryFilters[cat];
+            const toggle = document.querySelector(`[data-cat="${cat}"]`);
+            if (toggle) {
+                toggle.classList.toggle('active');
+            }
+            applyFilters();
+        }
+
+        function onSev(val) {
+            minSeverityFilter = parseInt(val);
+            document.getElementById('sev-v').textContent = val;
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const verifiedOnly = document.getElementById('tog-vfd').checked;
+            // Apply filters to all markers on map
+            masterCluster.eachLayer(layer => {
+                let show = true;
+                // Add filter logic here
+                layer.setOpacity(show ? 1 : 0.2);
+            });
+        }
+
+        function toggleClusterMode(enabled) {
+            if (enabled) {
+                map.addLayer(masterCluster);
+            } else {
+                map.removeLayer(masterCluster);
+            }
+        }
+
+        function checkRoute() {
+            const from = document.getElementById('rte-from').value;
+            const to = document.getElementById('rte-to').value;
+            if (!from || !to) {
+                document.getElementById('rte-result').innerHTML = '<span style="color: #ff4444;">Please enter both origin and destination</span>';
+                return;
+            }
+            document.getElementById('rte-result').innerHTML = '<span style="color: #00d2ff;">Calculating route...</span>';
+            // Route calculation logic would go here
+        }
+
+        async function parseAI() {
+            const textContent = document.getElementById('ai-inp').value.trim();
+            if (!textContent) return;
+            
+            const loader = document.getElementById('pi');
+            const resultBox = document.getElementById('ai-res');
+            const addButton = document.getElementById('ai-add');
+            
+            loader.style.display = 'flex';
+            resultBox.style.display = 'none';
+            addButton.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/parse-incident', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: textContent })
+                });
                 
-        except Exception as e:
-            print(f"⚠️ Macro feed error: {e}")
-
-    print("🔍 Scraping Hyper-Local Paris Micro-Feeds...")
-    for feed_url in MICRO_FEEDS:
-        try:
-            feed = feedparser.parse(feed_url)
-            if feed.entries:
-                # --- FIX A MODE (CURRENT) ---
-                for entry in reversed(feed.entries[:5]):
-                    await process_raw_report(
-                        getattr(entry, 'title', ''), 
-                        getattr(entry, 'description', ''), 
-                        "LOCAL INTEL", 
-                        "LeParisien" if "leparisien" in feed_url else "LeFigaro"
-                    )
-                    # 🚨 FIX A: 2-second breathing room to prevent 429 rate limit errors
-                    await asyncio.sleep(2)
+                const parsedData = await response.json();
                 
-                # --- FIX B MODE (UPGRADE - uncomment to enable) ---
-                # Collect articles for batch processing
-                # articles = []
-                # for entry in reversed(feed.entries[:5]):
-                #     articles.append({
-                #         "title": getattr(entry, 'title', ''),
-                #         "summary": getattr(entry, 'description', '')
-                #     })
-                # source_name = "LeParisien" if "leparisien" in feed_url else "LeFigaro"
-                # await analyze_articles_batch(articles, "LOCAL INTEL", source_name)
-                # await asyncio.sleep(2)  # Still wait between batch calls
+                // Expose structured properties inside your UI metrics
+                resultBox.innerHTML = `
+                    <div><span class="fk">CATEGORY: </span><span class="fv">${parsedData.category}</span></div>
+                    <div><span class="fk">TYPE: </span><span class="fv">${parsedData.incident_type}</span></div>
+                    <div><span class="fk">SEVERITY: </span><span class="fv">${parsedData.severity}/5</span></div>
+                    <div><span class="fk">COORDS: </span><span class="fv">${parsedData.lat}, ${parsedData.lng}</span></div>
+                `;
                 
-        except Exception as e:
-            print(f"⚠️ Micro feed error: {e}")
-    
-    print("✅ Intelligence feeds synchronized.")
+                resultBox.style.display = 'block';
+                addButton.style.display = 'block';
+                
+                // Keep a temporary reference to store onto map if validated
+                window.latestParsedIncident = parsedData;
+                
+            } catch (error) {
+                resultBox.innerHTML = `<span style="color:var(--cat-a)">Parsing Timeout / Failure</span>`;
+                resultBox.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
 
-async def intelligence_gathering_loop():
-    """
-    Background worker that handles all OSINT data fetching silently in the background,
-    preventing any frontend timeouts or lag.
-    
-    Sequence:
-    1. Clean old data (>24h)
-    2. Scrape transit (fast, hits map instantly)
-    3. Scrape intelligence feeds (AI analysis)
-    4. Rest for 5 minutes before next cycle
-    """
-    while True:
-        try:
-            print("🚀 Starting background intelligence sweep...")
+        function addParsed() {
+            if (window.latestParsedIncident) {
+                const incident = window.latestParsedIncident;
+                // Add to map by creating a marker
+                const marker = L.marker([incident.lat, incident.lng], {
+                    icon: L.divIcon({
+                        className: 'osint-marker',
+                        html: `<div style="width: 100%; height: 100%; background: #ff4444; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 8px #ff4444;"></div>`,
+                        iconSize: [12, 12],
+                        iconAnchor: [6, 6]
+                    })
+                });
+                marker.addTo(map);
+                map.flyTo([incident.lat, incident.lng], 15);
+                document.getElementById('ai-inp').value = '';
+                document.getElementById('ai-res').style.display = 'none';
+                document.getElementById('ai-add').style.display = 'none';
+            }
+        }
+        function exportDailyBrief() {
+            if (activeIncidents.length === 0) {
+                alert("⚠️ No active intelligence on the map to export.");
+                return;
+            }
+            // 1. Create the CSV Headers
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Category,Severity,Type,Source,Time (CET),Latitude,Longitude,Description\n";
+            // 2. Loop through every dot on the map and format it
+            activeIncidents.forEach(function(inc) {
+                // Clean the description to prevent commas from breaking the spreadsheet columns
+                let cleanDesc = inc.description.replace(/,/g, ";").replace(/\n/g, " ").replace(/<[^>]*>?/gm, ''); 
+                
+                // Convert the time to a readable format
+                let timeString = new Date().toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false});
+                
+                // Build the row
+                let row = `${inc.category},${inc.severity},${inc.type},${inc.source_type},${timeString},${inc.lat},${inc.lng},"${cleanDesc}"`;
+                csvContent += row + "\n";
+            });
+            // 3. Trigger the secure local download
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
             
-            # Clean old incidents from database first
-            database_auto_scrub()
+            // Name the file dynamically based on today's date
+            let dateStr = new Date().toISOString().slice(0, 10);
+            link.setAttribute("download", `GreyLane_Intelligence_Brief_${dateStr}.csv`);
             
-            # 1. Run transit first so transport updates hit the map instantly
-            await scrape_transit_data()
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+
+    <!-- BOTTOM SYSTEM COMPLIANCE & AUTHORITATIVE DATA LAYER -->
+    <div id="bottom-authority-bar">
+        <div class="footer-logo-group">
+            <!-- Your Custom Elite Round Seal -->
+            <img class="footer-gl-main" src="new logo grey lane.png" alt="Grey Lane Security Grid">
             
-            # 2. Run the heavier AI news analysis loops right after
-            await scrape_intelligence_feeds()
-            
-            print("✅ Sweep complete. Resting for 5 minutes...")
-            await asyncio.sleep(300)  # Wait 5 minutes before pulling new data
-            
-        except Exception as e:
-            print(f"❌ Error in background intelligence worker: {type(e).__name__}: {e}")
-            print("⏱️ Retrying in 60 seconds...")
-            await asyncio.sleep(60)  # Wait 1 minute before retrying if something fails
-
-# --- FASTAPI LIFESPAN & STARTUP ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Modern FastAPI startup/shutdown handler using lifespan context manager."""
-    print("🚀 Booting Multi-Source AI OSINT Dashboard Server...")
-    print("⚙️  Initializing SQLite database...")
-    init_db()
-    
-    print("🧠 Launching background intelligence gathering loop (5-minute intervals)...")
-    asyncio.create_task(intelligence_gathering_loop())
-    print("🤖 Background intelligence worker successfully detached and running.")
-    
-    print("✅ Server ready! Website loads instantly. Scraping runs in background.")
-    yield
-    
-    print("🛑 Shutting down server...")
-
-# Alternative startup method (both approaches work)
-# Uncomment to use classic @app.on_event approach instead of lifespan:
-# @app.on_event("startup")
-# async def startup_event():
-#     asyncio.create_task(intelligence_gathering_loop())
-#     print("🤖 Background intelligence worker detached.")
-
-# --- FASTAPI APP ---
-app = FastAPI(title="Grey Lane Backend", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-@app.get("/")
-def read_root(): return {"status": "Online"}
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True: await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
+            <!-- Regional Media & Public Infrastructure Vector Nodes (Fixed via Google CDN) -->
+            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=france24.com&sz=128" alt="FRANCE 24">
+            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=leparisien.fr&sz=128" alt="LE PARISIEN">
+            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=data.gouv.fr&sz=128" alt="DATA.GOUV.FR">
+            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=iledefrance-mobilites.fr&sz=128" alt="IDFM">
+        </div>
+        
+        <div class="footer-legal-text">
+            INTEGRATED SYSTEM DEPLOYMENT OPERATING IN CONFORMANCE WITH REGIONAL OPEN DATA INITIATIVES AND MUNICIPAL REPORTING MANDATES. SYSTEMATIZED INTELLIGENCE INPUTS AND GEOSPATIAL MATRIX REAL-TIME INGESTIONS ARE PROPRIETARY ANALYTICAL COMPILATIONS REPLICATED VIA REGISTERED PUBLIC CONTEXT ENDPOINTS [IDFM, DATA.GOUV.FR, LE PARISIEN, FRANCE 24]. THIS PLATFORM IMPLEMENTATION OPERATES FULLY INDEPENDENTLY AS A NON-ENDORSED VISUALIZATION INSTRUMENT IN ACCORDANCE WITH RELEVANT PUBLIC SECTOR RE-USE PROTOCOLS.
+        </div>
+    </div>
+</body>
+</html>
