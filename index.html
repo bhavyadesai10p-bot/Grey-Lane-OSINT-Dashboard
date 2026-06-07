@@ -1083,18 +1083,25 @@
                 const inc = data.incident;
                 activeIncidents.push(inc);
                 if(activeIncidents.length > 50) activeIncidents.shift(); 
-                // --- LIVE HEADER STATS ENGINE ---
-                // 1. Update total active incidents
+                
                 document.getElementById('stat-active').innerText = activeIncidents.length;
                 
-                // 2. Count and update Critical (High Severity) incidents
-                let critCount = activeIncidents.filter(item => (item.severity || '').toLowerCase() === 'high').length;
+                // 🛡️ SAFE SEVERITY PARSING: Fixes the Number/String Crash!
+                let rawSev = String(inc.severity || "low").toLowerCase();
+                let isHigh = rawSev.includes("high") || rawSev.includes("5") || rawSev.includes("4");
+                let isMed = rawSev.includes("medium") || rawSev.includes("3") || rawSev.includes("warning");
+                
+                let critCount = activeIncidents.filter(item => {
+                    let s = String(item.severity || "").toLowerCase();
+                    return s.includes("high") || s.includes("5") || s.includes("4");
+                }).length;
                 document.getElementById('stat-crit').innerText = critCount;
                 
-                // 3. Count and update Transit disruptions
                 let transitCount = activeIncidents.filter(item => item.category === 'TRANSIT').length;
                 document.getElementById('stat-transit-cnt').innerText = transitCount;
-                let sevClass = inc.severity.toLowerCase() === "high" ? "severity-high" : (inc.severity.toLowerCase() === "medium" ? "severity-medium" : "severity-low");
+                
+                let sevClass = isHigh ? "severity-high" : (isMed ? "severity-medium" : "severity-low");
+                
                 // --- CUSTOM TACTICAL STYLING ENGINE ---
                 let customClass = `osint-marker ${sevClass}`;
                 let mSize = 14;
@@ -1102,27 +1109,22 @@
                 let isTransit = false;
                 let markerColor = '#ddeeff'; 
                 
-                // CRITICAL FIX: If it's not transit, it is automatically a news/crime alert!
                 if (inc.category === 'TRANSIT') {
                     isTransit = true;
                     mSize = 12;
-                    markerColor = '#00d2ff';
+                    markerColor = '#00d2ff'; // Cyan for Transit
                     customHtml = '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>';
                 } else {
-                    // Color-code all incoming intelligence by severity level
-                    if (inc.severity.toLowerCase() === 'high') {
-                        markerColor = '#ff2d78'; // Crimson Threat Red
-                        mSize = 12;
-                    } else if (inc.severity.toLowerCase() === 'medium') {
-                        markerColor = '#ffa502'; // Operational Warning Amber (YOUR YELLOW DOTS!)
-                        mSize = 10;
+                    if (isHigh) {
+                        markerColor = '#ff2d78'; mSize = 12; // Crimson Red
+                    } else if (isMed) {
+                        markerColor = '#ffa502'; mSize = 10; // Amber Yellow!
                     } else {
-                        markerColor = '#2ed573'; // Secure Vector Green
-                        mSize = 8;
+                        markerColor = '#2ed573'; mSize = 8;  // Secure Green
                     }
                     customHtml = `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.9; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
                 }
-                // Create the marker
+                
                 const marker = L.marker([inc.lat, inc.lng], { 
                     icon: L.divIcon({
                         className: customClass, 
@@ -1133,29 +1135,22 @@
                 });
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
                 
-                // 🚨 CRITICAL SPLIT FIX: Put news directly on the map, transit in the cluster
                 if (inc.category !== 'TRANSIT') {
                     marker.addTo(map); 
                 } else {
                     marker.addTo(masterCluster); 
                 }
                 
-                // --- THE TACTICAL IMPACT RADIUS ---
                 marker.on('click', () => {
-                    // 1. Erase the previous impact zone if one exists
                     if (window.activeImpactZone) {
                         map.removeLayer(window.activeImpactZone);
                     }
-                    
-                    // 2. Determine the color (Cyan for transit, Severity color for news/crime)
-                    let zoneColor = isTransit ? '#00d2ff' : (inc.severity.toLowerCase() === "high" ? "#ff4444" : "#ffcc00");
-                    
-                    // 3. Draw a 500-meter tactical ring
+                    let zoneColor = isTransit ? '#00d2ff' : (isHigh ? "#ff4444" : "#ffcc00");
                     window.activeImpactZone = L.circle([inc.lat, inc.lng], {
-                        radius: 500, // 500 meters
+                        radius: 500,
                         color: zoneColor,
                         weight: 2,
-                        dashArray: "5, 8", // Creates a military-style dashed border
+                        dashArray: "5, 8",
                         fillColor: zoneColor,
                         fillOpacity: 0.1
                     }).addTo(map);
@@ -1164,17 +1159,18 @@
                 const timeString = new Date().toLocaleTimeString([], { hour12: false });
                 const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
                 const logEntry = document.createElement('div');
-                logEntry.className = `log-entry ${inc.severity.toLowerCase()}`;
+                
+                let logLevel = isTransit ? 'transit' : (isHigh ? 'high' : (isMed ? 'medium' : 'low'));
+                logEntry.className = `log-entry ${logLevel}`;
                 logEntry.innerHTML = `
                     <div class="log-time">[${timeString}] SYSTEM DROP</div>
                     <strong style="color: #fff;">[ ${inc.category} ]</strong><br>
                     ${shortDesc}
                 `;
                 logEntry.onclick = () => {
-                    // Zoom out slightly to zoom level 15 so we can see the whole 500m radius
                     map.flyTo([inc.lat, inc.lng], 15, { animate: true, duration: 1.5 });
                     marker.openPopup();
-                    marker.fire('click'); // This fires the impact radius we just built!
+                    marker.fire('click'); 
                 };
                 logContent.prepend(logEntry);
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
