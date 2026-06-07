@@ -967,30 +967,52 @@
                 alert("OSINT SYSTEM: Please click on the map twice to set an Origin and Destination.");
                 return;
             }
-            routeLayer.clearLayers();
+            
             const resBox = document.getElementById('rte-result');
             resBox.style.display = 'block';
             resBox.style.background = '#222';
             resBox.style.border = '1px solid #444';
             resBox.style.color = '#fff';
-            resBox.innerHTML = '⏳ Satellite calculating street route...';
+            resBox.innerHTML = '⏳ Calculating tactical vector...';
+            
+            // FORCE HTTPS to prevent mixed-content deployment blocks
             const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordFrom[1]},${coordFrom[0]};${coordTo[1]},${coordTo[0]}?overview=full&geometries=geojson`;
+            
             try {
                 const response = await fetch(osrmUrl);
+                if (!response.ok) throw new Error("Routing API service unavailable");
+                
                 const data = await response.json();
-                if (data.code !== 'Ok') {
-                    resBox.innerHTML = '❌ ROUTE FAILED: Cannot find valid street path.';
-                    return;
+                if (!data.routes || data.routes.length === 0) {
+                    throw new Error("No navigable routes found across sectors");
                 }
+                
+                // Clear any old routing lines on the map
+                routeLayer.clearLayers();
+                if (window.currentRouteLine) {
+                    map.removeLayer(window.currentRouteLine);
+                }
+                
                 const routeGeoJSON = data.routes[0].geometry;
                 const realRouteLine = L.geoJSON(routeGeoJSON, {
-                    style: { color: '#00d4ff', weight: 4, opacity: 0.8 }
+                    style: { color: '#00d2ff', weight: 4, opacity: 0.8, dashArray: '5, 10' }
                 }).addTo(routeLayer);
+                
+                // Draw start and end markers
                 L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
                 L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
+                
+                // Fit map view tightly to the calculated path
                 map.fitBounds(realRouteLine.getBounds(), {padding: [50, 50]});
+                resBox.innerHTML = '✓ SECURE ROUTE CALCULATED';
+                resBox.style.background = 'rgba(0, 210, 255, 0.1)';
+                resBox.style.border = '1px solid #00d2ff';
+                resBox.style.color = '#00d2ff';
+                
+                // Check for threats on route
                 const dangerZone = realRouteLine.getBounds().pad(0.015);
                 const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
+                
                 if (threatsOnRoute.length === 0) {
                     resBox.style.background = 'rgba(0, 255, 0, 0.1)';
                     resBox.style.border = '1px solid #00ff00';
@@ -1008,7 +1030,28 @@
                     });
                 }
             } catch (error) {
-                resBox.innerHTML = '❌ SATELLITE OFFLINE: Routing engine unreachable.';
+                console.error("Route Safety Engine Error:", error);
+                resBox.innerHTML = '⚠ ROUTING ERROR: FALLBACK APPLIED';
+                resBox.style.background = 'rgba(255, 100, 68, 0.1)';
+                resBox.style.border = '1px solid #ff6644';
+                resBox.style.color = '#ff6644';
+                
+                // Fallback: Clear freeze and draw standard sector-to-sector vector line
+                routeLayer.clearLayers();
+                if (window.currentRouteLine) map.removeLayer(window.currentRouteLine);
+                
+                window.currentRouteLine = L.polyline([[coordFrom.lat, coordFrom.lng], [coordTo.lat, coordTo.lng]], {
+                    color: '#ff4444',
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: '2, 5'
+                }).addTo(routeLayer);
+                
+                // Draw fallback markers
+                L.circleMarker([coordFrom.lat, coordFrom.lng], {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
+                L.circleMarker([coordTo.lat, coordTo.lng], {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
+                
+                map.fitBounds(window.currentRouteLine.getBounds(), {padding: [50, 50]});
             }
         }
 
