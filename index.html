@@ -1086,28 +1086,27 @@
                 let mSize = 14;
                 let customHtml = '';
                 let isTransit = false;
-                let markerColor = '#00ffff';
-                let borderColor = '#ffffff';
+                let markerColor = '#ddeeff'; 
                 
-                // FIXED Check: Differentiate between TRANSIT and ALL NEWS/CRIME types
+                // CRITICAL FIX: If it's not transit, it is automatically a news/crime alert!
                 if (inc.category === 'TRANSIT') {
                     isTransit = true;
                     mSize = 12;
                     markerColor = '#00d2ff';
                     customHtml = '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>';
                 } else {
-                    // News markers: Color-code by severity (PROTEST, CRIME, DAMAGE, SECURITY)
+                    // Color-code all incoming intelligence by severity level
                     if (inc.severity.toLowerCase() === 'high') {
                         markerColor = '#ff2d78'; // Crimson Threat Red
-                        mSize = 10;
+                        mSize = 12;
                     } else if (inc.severity.toLowerCase() === 'medium') {
-                        markerColor = '#ffa502'; // Operational Warning Amber (Your yellow dots!)
-                        mSize = 8;
+                        markerColor = '#ffa502'; // Operational Warning Amber (YOUR YELLOW DOTS!)
+                        mSize = 10;
                     } else {
                         markerColor = '#2ed573'; // Secure Vector Green
-                        mSize = 7;
+                        mSize = 8;
                     }
-                    customHtml = `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.8; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
+                    customHtml = `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.9; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
                 }
                 // Create the marker
                 const marker = L.marker([inc.lat, inc.lng], { 
@@ -1120,12 +1119,10 @@
                 });
                 marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
                 
-                // 🚨 FIXED CRITICAL SPLIT: Prevent news from mixing with transit clusters
+                // 🚨 CRITICAL SPLIT FIX: Put news directly on the map, transit in the cluster
                 if (inc.category !== 'TRANSIT') {
-                    // Drop news dots STRAIGHT onto the main map so they NEVER cluster or hide
                     marker.addTo(map); 
                 } else {
-                    // Keep transit dots inside your existing cluster group
                     marker.addTo(masterCluster); 
                 }
                 
@@ -1337,7 +1334,8 @@
             addButton.style.display = 'none';
             
             try {
-                const response = await fetch('/api/parse-incident', {
+                // FORCE HTTPS to your exact live Render server domain!
+                const response = await fetch('https://grey-lane-osint-dashboard.onrender.com/api/parse-incident', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: textContent })
@@ -1360,6 +1358,7 @@
                 window.latestParsedIncident = parsedData;
                 
             } catch (error) {
+                console.error("AI Parser Routing Error:", error);
                 resultBox.innerHTML = `<span style="color:var(--cat-a)">Parsing Timeout / Failure</span>`;
                 resultBox.style.display = 'block';
             } finally {
