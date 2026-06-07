@@ -1316,14 +1316,13 @@
         }
 
         function checkRoute() {
-            const from = document.getElementById('rte-from').value;
-            const to = document.getElementById('rte-to').value;
-            if (!from || !to) {
-                document.getElementById('rte-result').innerHTML = '<span style="color: #ff4444;">Please enter both origin and destination</span>';
+            if (!coordFrom || !coordTo) {
+                document.getElementById('rte-result').innerHTML = '<span style="color: #ff4444;">Please click the map to set both origin and destination</span>';
                 return;
             }
-            document.getElementById('rte-result').innerHTML = '<span style="color: #00d2ff;">Calculating route...</span>';
-            // Route calculation logic would go here
+            
+            // Trigger the actual OSRM routing engine!
+            calculateRoute();
         }
 
         async function parseAI() {
