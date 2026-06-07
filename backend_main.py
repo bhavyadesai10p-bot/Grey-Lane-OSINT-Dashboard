@@ -6,6 +6,7 @@ import feedparser
 import re
 import sqlite3
 import requests
+import hashlib
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
