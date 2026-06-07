@@ -44,33 +44,24 @@ PARIS_TRANSIT_NODES = {
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 SYSTEM_INSTRUCTION = """
-You are a senior OSINT analyst for the Paris metropolitan region.
-Your primary task is to extract incident data from news and social media.
+You are an elite OSINT geospatial intelligence parser for the Grey Lane platform in Paris. 
+Analyze the provided raw text (social media, news, or Telegram chatter) and extract the incident details into STRICT JSON format.
 
-GEOGRAPHIC RELEVANCE RULES:
-1. "Relevant to Paris" means the incident occurs ANYWHERE within the Île-de-France region (Department numbers 75, 77, 78, 91, 92, 93, 94, 95).
-2. You MUST include incidents in all suburbs, industrial zones, and transport hubs surrounding Paris (e.g., Saint-Denis, Nanterre, La Défense, Créteil, Roissy-CDG).
-3. Do NOT discard an article just because it doesn't mention the city center. If it happens in the suburbs, it IS relevant.
+Crucial Protest Routing Rules:
+If the text describes a moving event (e.g., a protest march, a parade, a moving riot), you MUST identify the starting location and the destination location, and output them as start_lat, start_lng, and end_lat, end_lng.
+If it is a stationary event (like a street robbery or a static gathering), set the end_lat and end_lng to the exact same values as the start_lat and start_lng.
 
-INCIDENT ACCEPTANCE RULES:
-Accept any local news event that impacts daily urban life, safety, or logistics in the region.
-Do NOT restrict yourself to violent crises. If an event details:
-- An arrest or police activity
-- A vehicle accident or traffic incident
-- Property damage or vandalism
-- Localized urban construction or roadwork
-- Regional gatherings, protests, or demonstrations
-- Transit disruptions or service changes
-- Industrial incidents or workplace emergencies
-- Public health or environmental issues
-...then mark 'relevant_to_paris': true.
-
-The map should reflect the full spectrum of urban activity, not just crises.
-
-OUTPUT RULES:
-- If relevant, return JSON with these exact fields: {"relevant_to_paris": true, "exact_location_found": true, "lat": <float>, "lng": <float>, "severity": "low/medium/high", "category": "PROTEST/DAMAGE/CRIME/TRANSIT/SECURITY", "description": "..."}
-- If NOT relevant to the Île-de-France region, return {"relevant_to_paris": false}
-- ALWAYS return valid JSON only. No markdown, no explanations, no extra text.
+You must return ONLY a JSON object with exactly these keys:
+{
+    "category": "Choose one: CIVIL_UNREST, PROPERTY_DAMAGE, CRIME, HIGH_SECURITY",
+    "incident_type": "Short 2-3 word description (e.g., 'Moving Protest', 'Violent Riot', 'Pickpocket')",
+    "severity": "Rate 1 to 5 (5 being highly critical)",
+    "start_lat": "Latitude of the origin point (float)",
+    "start_lng": "Longitude of the origin point (float)",
+    "end_lat": "Latitude of the destination point (float) - identical to start if stationary",
+    "end_lng": "Longitude of the destination point (float) - identical to start if stationary",
+    "description": "A brief, tactical summary of the event."
+}
 """
 
 ai_model = genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=SYSTEM_INSTRUCTION)
