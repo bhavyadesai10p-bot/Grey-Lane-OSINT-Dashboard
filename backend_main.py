@@ -295,7 +295,7 @@ async def process_raw_report(title, description, source_type, source_name):
         return
 
     # 2. KEYWORD SHIELD: Pre-filter text to protect free tier daily limits
-    # Now accepts broader urban incidents: accidents, construction, property damage, gatherings, etc.
+    # Now accepts broader urban incidents: accidents, construction, property damage, gatherings, events, and local city news
     security_keywords = [
         # Protests & civil unrest
         "protest", "manifestation", "strike", "grève", "riot", "émeute", "march", "défilé",
@@ -318,13 +318,17 @@ async def process_raw_report(title, description, source_type, source_name):
         "gathering", "assembly", "rassemblement", "event", "événement", "festival",
         # General urban terms (keep map active)
         "paris", "île-de-france", "region", "région", "incident", "alert", "alerte",
-        "security", "sécurité", "suspect", "risk", "risque", "danger", "emergency", "urgence"
+        "security", "sécurité", "suspect", "risk", "risque", "danger", "emergency", "urgence",
+        # --- NEW LOCAL NEWS KEYWORDS FOR YELLOW DOTS (CITY EVENTS & POLITICS) ---
+        "politique", "mairie", "projet", "événement", "ouverture", 
+        "annonce", "france", "ville", "quartier", "rue", "développement", "nouveau"
     ]
     
     combined_lower = (title + " " + description).lower()
     has_keyword = any(keyword in combined_lower for keyword in security_keywords)
     
     if not has_keyword:
+        print(f"🚫 Python Filter Blocked: {title[:40]}...")
         return
 
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
