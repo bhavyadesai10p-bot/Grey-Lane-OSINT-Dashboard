@@ -702,24 +702,32 @@ def read_root(): return {"status": "Online"}
 @app.get("/api/incidents")
 def get_historical_incidents():
     """
-    Fetch all stored incidents from the database without triggering a new scrape.
-    Returns all dots instantly for page load and historical reference.
+    Fetch incidents created in the last 24 hours from the database.
+    Automatically filters old data to keep the map fresh and performant.
     """
     try:
         conn = sqlite3.connect(DB_FILE)
-        # Use sqlite3.Row to get dictionary-like results matching your keys
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Fetch everything stored in the database
-        cursor.execute("SELECT category, description, severity, lat, lng FROM incidents")
+        # Query only incidents from the last 24 hours using ingested_at timestamp
+        # ingested_at is stored as ISO format datetime string (UTC)
+        cursor.execute("""
+            SELECT category, description, severity, lat, lng, ingested_at
+            FROM incidents 
+            WHERE ingested_at >= datetime('now', '-1 day')
+            ORDER BY ingested_at DESC
+        """)
+        
         rows = cursor.fetchall()
         conn.close()
         
         # Convert rows to a clean list of dictionaries
         incidents = [dict(row) for row in rows]
-        return {"status": "success", "data": incidents}
+        print(f"📊 API: Returned {len(incidents)} incidents from last 24 hours")
+        return {"status": "success", "data": incidents, "count": len(incidents)}
     except Exception as e:
+        print(f"⚠️ API Error in /api/incidents: {type(e).__name__}: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.websocket("/ws")
