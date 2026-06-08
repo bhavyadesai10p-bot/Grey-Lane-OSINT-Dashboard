@@ -1055,6 +1055,26 @@
             }
         }
 
+        // Function to load existing dots instantly on page refresh
+        async function loadExistingIncidents() {
+            try {
+                const response = await fetch('/api/incidents');
+                const result = await response.json();
+                
+                if (result.status === "success") {
+                    result.data.forEach(incident => {
+                        // Use your existing marker-plotting logic here
+                        // Example:
+                        const markerColor = incident.category === 'LOCAL_INTEL' ? 'yellow' : 'blue';
+                        plotMarkerOnMap(incident.lat, incident.lng, incident.description, markerColor);
+                    });
+                    console.log(`Loaded ${result.data.length} historical dots instantly!`);
+                }
+            } catch (error) {
+                console.error("Failed to preload historical data:", error);
+            }
+        }
+
         const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
         const ws = new WebSocket(wsUrl);
         const statusText = document.getElementById("status-text");
@@ -1067,6 +1087,8 @@
                 liveDot.style.boxShadow = "0 0 8px #00c851";
             }
             console.log("OSINT ENGINE: Connected to secure backend telemetry.");
+            // Load existing incidents on WebSocket connection
+            loadExistingIncidents();
         };
         ws.onclose = function() { 
             const liveDot = document.getElementById("live-dot");
