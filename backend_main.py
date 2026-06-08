@@ -332,60 +332,52 @@ async def process_raw_report(title, description, source_type, source_name):
         return
 
     print(f"🧠 AI Analyzing {source_type} [{source_name}]: {title[:50]}...")
+
+    # Force the prompt to use your locked-in global system instruction format
     prompt = f"""
-    Analyze this Paris news report:
+    Analyze this news report text:
     Title: {title}
     Description: {description}
     
-    Determine if this happens in or mentions Paris/Île-de-France. If yes, set relevant_to_paris to true.
-    Extract the most accurate coordinates possible for the location mentioned. If a general neighborhood or just 'Paris' is given, use coordinates near that area.
-    
-    Respond ONLY with a valid JSON object formatted exactly like this:
-    {{"relevant_to_paris": true, "exact_location_found": true, "lat": 48.8566, "lng": 2.3522, "severity": "medium", "category": "LOCAL_INTEL"}}
+    If this event occurs outside of Paris or the Île-de-France region, set the 'category' key strictly to 'OUTSIDE'.
+    Otherwise, extract coordinates and map it into one of the designated categories (CIVIL_UNREST, PROPERTY_DAMAGE, CRIME, LOCAL_INTEL).
     """
 
     try:
         response = await asyncio.to_thread(ai_model.generate_content, prompt)
         
-        # 🕵️ DIAGNOSTIC: Print exactly what Gemini returned
         print(f"🕵️ GEMINI RAW OUTPUT:\n{response.text}\n---")
         
         raw_json = response.text.strip()
         if "{" in raw_json: 
             raw_json = raw_json[raw_json.find("{"):raw_json.rfind("}")+1]
         
-        print(f"🕵️ EXTRACTED JSON: {raw_json}")
-        
         ai_data = json.loads(raw_json)
         print(f"🕵️ PARSED JSON SUCCESS: {ai_data}")
         
-        if not ai_data.get("relevant_to_paris", False):
-            print(f"⏭️ Skipped: Not relevant to Paris")
+        # If the AI determined it's completely outside the region
+        if ai_data.get("category") == "OUTSIDE":
+            print(f"⏭️ Skipped: Not relevant to Paris/Île-de-France")
             return
             
-        lat = float(ai_data.get("lat", PARIS_CENTER_LAT))
-        lng = float(ai_data.get("lng", PARIS_CENTER_LNG))
-        
-        if not ai_data.get("exact_location_found", False):
-            lat += random.uniform(-0.005, 0.005)
-            lng += random.uniform(-0.005, 0.005)
+        # Match keys directly to your global SYSTEM_INSTRUCTION
+        lat = float(ai_data.get("start_lat", PARIS_CENTER_LAT))
+        lng = float(ai_data.get("start_lng", PARIS_CENTER_LNG))
 
         incident_data = {
             "lat": lat, 
             "lng": lng, 
             "category": ai_data.get("category", source_type).upper(),
             "description": f"<b>🚨 {source_type} ALERT: {title}</b><br><br>{description[:160]}...<br><br>Source: {source_name}",
-            "severity": ai_data.get("severity", "medium").lower()
+            "severity": str(ai_data.get("severity", "2"))
         }
         
         store_incident(incident_data)
-        
         await broadcast_new_incident(incident_data)
         print(f"📍 REAL-TIME AI DROP: [{incident_data['category']}] saved & dispatched.")
         
     except json.JSONDecodeError as je:
         print(f"❌ JSON PARSE FAILED: {je}")
-        print(f"   Raw text was: {response.text[:200]}")
     except Exception as e:
         print(f"⚠️ Intel processing skipped: {type(e).__name__}: {e}")
 
