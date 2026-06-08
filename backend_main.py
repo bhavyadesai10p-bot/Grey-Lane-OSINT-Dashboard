@@ -699,6 +699,29 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 @app.get("/")
 def read_root(): return {"status": "Online"}
 
+@app.get("/api/incidents")
+def get_historical_incidents():
+    """
+    Fetch all stored incidents from the database without triggering a new scrape.
+    Returns all dots instantly for page load and historical reference.
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        # Use sqlite3.Row to get dictionary-like results matching your keys
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Fetch everything stored in the database
+        cursor.execute("SELECT category, description, severity, lat, lng FROM incidents")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Convert rows to a clean list of dictionaries
+        incidents = [dict(row) for row in rows]
+        return {"status": "success", "data": incidents}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
