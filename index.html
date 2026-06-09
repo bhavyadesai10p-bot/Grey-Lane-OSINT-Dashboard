@@ -1105,10 +1105,11 @@
         } 
 
         // --- 🚇 OFFICIAL PARIS RAIL NETWORK (IDFM OPEN DATA) ---
-        // COMMENTED OUT: This endpoint is currently returning 404 errors
-        /*
         fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/traces-du-reseau-ferre-idf/exports/geojson')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error("Transit Network API unavailable");
+                return response.json();
+            })
             .then(data => {
                 L.geoJSON(data, {
                     style: function (feature) {
@@ -1120,35 +1121,34 @@
                         return {
                             color: `#${cleanColor}`,
                             weight: 2,
-                            opacity: 0.4 // Kept dim so your glowing blue alerts stand out on top!
+                            opacity: 0.4 // Kept dim so your glowing blue alerts stand out on top
                         };
                     }
-                }).addTo(transitLayer); // This attaches the entire grid to your [TRANSIT: ON/OFF] button!
+                }).addTo(transitLayer); // Attaches to the Master Switch
             })
-            .catch(error => console.error("Geospatial routing error:", error));
-        */
+            .catch(error => console.warn("Transit Network lines currently offline:", error));
 
         // --- 🚉 OFFICIAL PARIS STATIONS (IDFM OPEN DATA) ---
-        // COMMENTED OUT: This endpoint is currently returning 404 errors
-        /*
-        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/gares-et-stations-du-reseau-ferre-d-ile-de-france/exports/geojson')
-            .then(response => response.json())
+        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/emplacement-des-gares-idf/exports/geojson')
+            .then(response => {
+                if (!response.ok) throw new Error("Station API unavailable");
+                return response.json();
+            })
             .then(data => {
                 L.geoJSON(data, {
                     // pointToLayer tells Leaflet how to draw point data (stations)
                     pointToLayer: function (feature, latlng) {
                         return L.circleMarker(latlng, {
-                            radius: 4.5,          // Nearly doubled the size for clear visibility
+                            radius: 4.5,          
                             fillColor: "#111111", // Dark center makes it a sleek hollow ring
                             color: "#ffffff",     // Bright white border to pop against the dark map
-                            weight: 1.5,          // Slightly thicker line
+                            weight: 1.5,          
                             opacity: 1,
                             fillOpacity: 1
                         });
                     },
                     // onEachFeature attaches the name tooltip to every single station
                     onEachFeature: function (feature, layer) {
-                        // IDFM stores the name in 'nom_long' or 'nom_gare'
                         let stationName = feature.properties.nom_long || feature.properties.nom_gare || "Station";
                         layer.bindTooltip(`[ ${stationName} ]`, {
                             direction: 'top',
@@ -1156,10 +1156,9 @@
                             opacity: 0.9
                         });
                     }
-                }).addTo(transitLayer); // Attaches to your Master Switch!
+                }).addTo(transitLayer); // Attaches to the Master Switch
             })
-            .catch(error => console.error("Station loading error:", error));
-        */
+            .catch(error => console.warn("Transit Stations currently offline:", error));
 
 
         // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
