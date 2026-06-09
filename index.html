@@ -699,6 +699,56 @@
             text-align: justify; /* Makes it look like a clean, solid block of legal text */
             padding-right: 20px;
         }
+
+        /* ==========================================================================
+           MOBILE RESPONSIVE OVERRIDE (Only activates on screens smaller than 768px)
+           ========================================================================== */
+        @media screen and (max-width: 768px) {
+            
+            /* 1. Make the main layout stack vertically instead of side-by-side */
+            body, .container, .main-layout {
+                flex-direction: column !important;
+                display: flex !important;
+                padding: 10px !important;
+                width: 100% !important;
+                box-sizing: border-box;
+            }
+            /* 2. Adjust map container height so it fits nicely on a phone screen */
+            #map {
+                width: 100% !important;
+                height: 50vh !important; /* Takes up exactly half the phone screen height */
+                border-radius: 8px;
+                margin-bottom: 15px;
+            }
+            /* 3. Adjust your info panels/sidebars to take full width underneath the map */
+            .sidebar, .info-panel, .controls {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 0 15px 0 !important;
+                box-sizing: border-box;
+            }
+            /* 4. Make text and headings slightly smaller so they don't wrap weirdly */
+            h1 {
+                font-size: 1.5rem !important;
+                text-align: center;
+            }
+            
+            h2, h3 {
+                font-size: 1.2rem !important;
+            }
+            /* 5. Make buttons easier to tap with mobile thumbs */
+            button, .btn {
+                width: 100% !important;
+                padding: 12px !important;
+                font-size: 1rem !important;
+                margin-bottom: 8px !important;
+            }
+            /* 6. Ensure Leaflet popups don't overflow the edges of a narrow screen */
+            .leaflet-popup-content {
+                max-width: 240px !important;
+                font-size: 0.9rem !important;
+            }
+        }
     </style>
 </head>
 <body>
