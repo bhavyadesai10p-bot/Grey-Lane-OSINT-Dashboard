@@ -706,109 +706,143 @@
            ========================================================================== */
 
         /* ────────────────────────────────────────────────────────────
-           PHONE LAYOUT (≤600px) - Mobile First Design
+           PHONE LAYOUT (≤600px) - Elite Card-Based App UI
            ──────────────────────────────────────────────────────────── */
         @media screen and (max-width: 600px) {
-            * {
-                box-sizing: border-box;
-            }
+            * { box-sizing: border-box; }
 
-            /* Make the body a natural scrolling column instead of hidden */
             body {
                 display: flex !important;
                 flex-direction: column !important;
-                height: auto !important;
+                background-color: #05070a !important; /* Deeper, richer app background */
                 min-height: 100vh;
                 overflow-y: auto !important; 
                 padding: 0 !important;
                 margin: 0 !important;
             }
 
-            /* Let header stack naturally if stats get too wide */
+            /* --- SLEEK APP HEADER --- */
             #top-header {
-                position: relative !important; 
+                position: sticky !important; 
+                top: 0 !important;
                 width: 100% !important;
-                height: auto !important;
-                padding: 10px !important;
-                flex-wrap: wrap; 
+                height: 60px !important;
+                padding: 0 15px !important;
+                background: rgba(10, 13, 18, 0.98) !important;
+                border-bottom: none !important;
                 z-index: 2000 !important;
+                display: flex !important;
+                justify-content: space-between !important;
             }
+            #logo-block span { font-size: 18px !important; } /* Scales logo perfectly for phone */
+            #header-stats { gap: 12px !important; }
+            .stat-val { font-size: 16px !important; }
+            .stat-lbl { font-size: 8px !important; }
+            #header-clock { display: none !important; } /* Hides clock to save space */
 
-            /* Map sits right below header, takes up top half of screen */
+            /* --- MAP AESTHETIC --- */
             #map {
                 position: relative !important; 
                 top: 0 !important;
                 left: 0 !important;
                 width: 100vw !important;
-                height: 45vh !important; 
+                height: 42vh !important; 
                 border-radius: 0 !important;
-                z-index: 1 !important;
+                border-bottom: 2px solid #00d2ff !important; /* Tactical glow separating map and tools */
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6) !important;
+                z-index: 1000 !important;
             }
 
-            /* BRING BACK THE CONTROLS! Stack them under the map */
+            /* --- APP WIDGET CARDS (The secret to professional UI) --- */
             .panel {
                 display: block !important;
                 position: relative !important;
-                top: 0 !important;
-                left: 0 !important;
                 width: 100% !important;
                 height: auto !important;
-                border-right: none !important;
-                border-bottom: 2px solid #333 !important;
+                background: transparent !important;
+                border: none !important;
+                padding: 15px !important;
                 overflow-y: visible !important;
             }
+            
+            /* Turns every section into a clean, rounded iOS/Android-style card */
+            .psec {
+                background: #10141a !important; 
+                border: 1px solid #1e2632 !important;
+                border-radius: 12px !important; /* Smooth rounded corners */
+                margin-bottom: 15px !important;
+                padding: 18px !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+            }
+            
+            .stitle {
+                font-size: 13px !important;
+                border-bottom: 1px solid #222d3d !important;
+                padding-bottom: 10px !important;
+                margin-bottom: 15px !important;
+            }
 
-            /* FIX THE NEWS PANEL: Stop it from hovering over the map */
+            /* --- MODERN FEED (Intelligence Log) --- */
             .log-panel {
                 position: relative !important; 
-                top: 0 !important;
-                right: 0 !important;
-                left: 0 !important;
                 width: 100% !important;
                 height: auto !important;
                 max-height: none !important; 
-                border-right: none !important;
-                border-top: 4px solid #00d4ff !important; 
-                border-radius: 0 !important;
+                background: transparent !important;
+                border: none !important;
                 box-shadow: none !important;
+                padding: 0 15px 30px 15px !important;
                 z-index: 10 !important;
             }
-
-            /* Let the news entries scroll nicely within their own box */
+            .log-header {
+                background: transparent !important;
+                border-bottom: 2px solid #00d4ff !important;
+                text-align: left !important;
+                padding: 0 0 10px 0 !important;
+                font-size: 14px !important;
+                margin-bottom: 15px !important;
+            }
             .log-content {
-                max-height: 60vh !important; 
-                padding: 10px !important;
+                padding: 0 !important;
+                max-height: none !important; /* Lets it scroll smoothly */
             }
-
             .log-entry {
-                font-size: 11px !important;
-                padding: 10px !important;
-                margin-bottom: 8px !important;
+                border-radius: 8px !important; /* Rounded log cards */
+                border-right: none !important;
+                background: #14181f !important;
+                padding: 12px !important;
+                margin-bottom: 10px !important;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
             }
 
-            /* Make buttons big and thumb-friendly */
+            /* --- THUMB-FRIENDLY TACTICAL BUTTONS --- */
             button, .btn {
                 width: 100% !important;
                 padding: 14px !important;
-                font-size: 14px !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+                letter-spacing: 1px !important;
                 margin: 8px 0 !important;
-                min-height: 44px !important; 
-                border-radius: 4px !important;
+                min-height: 48px !important; /* Apple's perfect tap-target size */
+                border-radius: 8px !important;
+                text-transform: uppercase !important;
+            }
+            
+            /* Inputs */
+            input[type="text"], .ai-textarea {
+                background: #0b0e12 !important;
+                border: 1px solid #222d3d !important;
+                border-radius: 6px !important;
+                padding: 12px !important;
+                font-size: 16px !important; /* Forces iOS not to zoom in automatically */
             }
 
             /* Leaflet popup adjustments for phone */
-            .leaflet-popup-content-wrapper {
-                max-width: 75vw !important;
-            }
-            .leaflet-popup-content {
-                font-size: 11px !important;
-                padding: 5px !important;
-            }
+            .leaflet-popup-content-wrapper { max-width: 75vw !important; border-radius: 8px !important; }
+            .leaflet-popup-content { font-size: 11px !important; padding: 5px !important; }
 
-            /* Hide unnecessary heavy footers on mobile */
-            #bottom-authority-bar {
-                display: none !important;
-            }
+            /* Hide heavy footers */
+            #bottom-authority-bar { display: none !important; }
         }
 
         /* ────────────────────────────────────────────────────────────
