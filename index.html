@@ -1139,12 +1139,12 @@
                     // pointToLayer tells Leaflet how to draw point data (stations)
                     pointToLayer: function (feature, latlng) {
                         return L.circleMarker(latlng, {
-                            radius: 4.5,          
-                            fillColor: "#111111", // Dark center makes it a sleek hollow ring
-                            color: "#ffffff",     // Bright white border to pop against the dark map
-                            weight: 1.5,          
-                            opacity: 1,
-                            fillOpacity: 1
+                            radius: 2.5,          // Shrunk down to look like tiny grid nodes
+                            fillColor: "#00d2ff", // Tactical cyan to match the Grey Lane theme
+                            color: "#00d2ff",     // Border matches the fill color
+                            weight: 1,            // Hairline thin border
+                            opacity: 0.3,         // 70% transparent so it fades perfectly into the dark map
+                            fillOpacity: 0.15     // Very faint, hollow center
                         });
                     },
                     // onEachFeature attaches the name tooltip to every single station
