@@ -782,12 +782,12 @@
 
             /* 6. EXACT CARD ORDERING (Categories -> Authority Bar -> Everything Else) */
             
-            #panel-left .psec:nth-child(1) { order: 1 !important; } /* 1st: Categories Card */
+            #panel-left .psec:nth-child(1) { order: 2 !important; } /* 2nd: Categories Card */
             
-            /* 2nd: The Brought-Back Authority Bar! */
+            /* 3rd: The Brought-Back Authority Bar! */
             #bottom-authority-bar { 
                 display: flex !important; 
-                order: 2 !important; 
+                order: 3 !important; 
                 position: relative !important;
                 width: 100% !important;
                 height: auto !important;
@@ -822,14 +822,14 @@
             }
 
             /* The rest of the standard panels */
-            #panel-left .psec:nth-child(2) { order: 3 !important; } /* 3rd: Filters */
-            #panel-left .psec:nth-child(3) { order: 4 !important; } /* 4th: Route Safety */
-            #panel-left .psec:nth-child(4) { order: 5 !important; } /* 5th: AI Parser */
-            #panel-left .psec:nth-child(5) { order: 6 !important; } /* 6th: Transit Lines */
+            #panel-left .psec:nth-child(2) { order: 4 !important; } /* 4th: Filters */
+            #panel-left .psec:nth-child(3) { order: 5 !important; } /* 5th: Route Safety */
+            #panel-left .psec:nth-child(4) { order: 6 !important; } /* 6th: AI Parser */
+            #panel-left .psec:nth-child(5) { order: 7 !important; } /* 7th: Transit Lines */
             
             /* 7. MODERN FEED (Intelligence Log locked to the very bottom) */
             .log-panel {
-                order: 7 !important;
+                order: 1 !important;
                 position: relative !important; 
                 width: 100% !important;
                 height: auto !important;
