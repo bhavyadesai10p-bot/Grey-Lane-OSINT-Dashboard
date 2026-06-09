@@ -701,52 +701,183 @@
         }
 
         /* ==========================================================================
-           MOBILE RESPONSIVE OVERRIDE (Only activates on screens smaller than 768px)
+           ADVANCED RESPONSIVE DESIGN - AUTO-DETECTS PHONE VS PC
+           Breakpoints: Phone (≤600px) | Tablet (601-1024px) | Desktop (>1024px)
            ========================================================================== */
-        @media screen and (max-width: 768px) {
-            
-            /* 1. Make the main layout stack vertically instead of side-by-side */
-            body, .container, .main-layout {
-                flex-direction: column !important;
+
+        /* ────────────────────────────────────────────────────────────
+           PHONE LAYOUT (≤600px) - Mobile First Design
+           ──────────────────────────────────────────────────────────── */
+        @media screen and (max-width: 600px) {
+            * {
+                box-sizing: border-box;
+            }
+
+            /* Make the body a natural scrolling column instead of hidden */
+            body {
                 display: flex !important;
+                flex-direction: column !important;
+                height: auto !important;
+                min-height: 100vh;
+                overflow-y: auto !important; 
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            /* Let header stack naturally if stats get too wide */
+            #top-header {
+                position: relative !important; 
+                width: 100% !important;
+                height: auto !important;
                 padding: 10px !important;
-                width: 100% !important;
-                box-sizing: border-box;
+                flex-wrap: wrap; 
+                z-index: 2000 !important;
             }
-            /* 2. Adjust map container height so it fits nicely on a phone screen */
+
+            /* Map sits right below header, takes up top half of screen */
             #map {
+                position: relative !important; 
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 45vh !important; 
+                border-radius: 0 !important;
+                z-index: 1 !important;
+            }
+
+            /* BRING BACK THE CONTROLS! Stack them under the map */
+            .panel {
+                display: block !important;
+                position: relative !important;
+                top: 0 !important;
+                left: 0 !important;
                 width: 100% !important;
-                height: 50vh !important; /* Takes up exactly half the phone screen height */
-                border-radius: 8px;
-                margin-bottom: 15px;
+                height: auto !important;
+                border-right: none !important;
+                border-bottom: 2px solid #333 !important;
+                overflow-y: visible !important;
             }
-            /* 3. Adjust your info panels/sidebars to take full width underneath the map */
-            .sidebar, .info-panel, .controls {
+
+            /* FIX THE NEWS PANEL: Stop it from hovering over the map */
+            .log-panel {
+                position: relative !important; 
+                top: 0 !important;
+                right: 0 !important;
+                left: 0 !important;
                 width: 100% !important;
-                max-width: 100% !important;
-                margin: 0 0 15px 0 !important;
-                box-sizing: border-box;
+                height: auto !important;
+                max-height: none !important; 
+                border-right: none !important;
+                border-top: 4px solid #00d4ff !important; 
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                z-index: 10 !important;
             }
-            /* 4. Make text and headings slightly smaller so they don't wrap weirdly */
-            h1 {
-                font-size: 1.5rem !important;
-                text-align: center;
+
+            /* Let the news entries scroll nicely within their own box */
+            .log-content {
+                max-height: 60vh !important; 
+                padding: 10px !important;
             }
-            
-            h2, h3 {
-                font-size: 1.2rem !important;
-            }
-            /* 5. Make buttons easier to tap with mobile thumbs */
-            button, .btn {
-                width: 100% !important;
-                padding: 12px !important;
-                font-size: 1rem !important;
+
+            .log-entry {
+                font-size: 11px !important;
+                padding: 10px !important;
                 margin-bottom: 8px !important;
             }
-            /* 6. Ensure Leaflet popups don't overflow the edges of a narrow screen */
+
+            /* Make buttons big and thumb-friendly */
+            button, .btn {
+                width: 100% !important;
+                padding: 14px !important;
+                font-size: 14px !important;
+                margin: 8px 0 !important;
+                min-height: 44px !important; 
+                border-radius: 4px !important;
+            }
+
+            /* Leaflet popup adjustments for phone */
+            .leaflet-popup-content-wrapper {
+                max-width: 75vw !important;
+            }
             .leaflet-popup-content {
-                max-width: 240px !important;
-                font-size: 0.9rem !important;
+                font-size: 11px !important;
+                padding: 5px !important;
+            }
+
+            /* Hide unnecessary heavy footers on mobile */
+            #bottom-authority-bar {
+                display: none !important;
+            }
+        }
+
+        /* ────────────────────────────────────────────────────────────
+           TABLET LAYOUT (601px - 1024px) - Medium Screens
+           ──────────────────────────────────────────────────────────── */
+        @media screen and (min-width: 601px) and (max-width: 1024px) {
+            
+            #map {
+                width: 100% !important;
+                height: 55vh !important;
+                position: relative !important;
+                top: auto !important;
+            }
+
+            .panel {
+                width: 100% !important;
+                height: auto !important;
+                position: relative !important;
+                max-height: 45vh !important;
+                overflow-y: auto !important;
+            }
+
+            button, .btn {
+                padding: 12px !important;
+                font-size: 13px !important;
+            }
+
+            .log-panel {
+                position: relative !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                right: auto !important;
+                top: auto !important;
+                height: auto !important;
+                max-height: 40vh !important;
+            }
+        }
+
+        /* ────────────────────────────────────────────────────────────
+           DESKTOP LAYOUT (>1024px) - Full Side-by-Side Layout
+           ──────────────────────────────────────────────────────────── */
+        @media screen and (min-width: 1025px) {
+            /* Keep original desktop layout */
+            body {
+                display: flex;
+                flex-direction: row;
+            }
+
+            #map {
+                position: fixed !important;
+                left: var(--panel-w) !important;
+                top: 55px !important;
+                width: calc(100% - var(--panel-w)) !important;
+                height: calc(100vh - 55px - 65px) !important;
+            }
+
+            .panel {
+                position: fixed !important;
+                left: 0 !important;
+                top: 55px !important;
+                width: var(--panel-w) !important;
+                height: calc(100vh - 55px - 65px) !important;
+                display: block !important;
+            }
+
+            button, .btn {
+                width: 100% !important;
+                padding: 10px !important;
+                font-size: 13px !important;
             }
         }
     </style>
@@ -868,6 +999,65 @@
         
         // Global WebSocket variable for reconnection handling
         let ws;
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // AUTO-DETECT DEVICE TYPE & APPLY RESPONSIVE BEHAVIOR
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        // Function to detect device type
+        function detectDevice() {
+            const userAgent = navigator.userAgent;
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+            const screenWidth = window.innerWidth;
+            
+            if (screenWidth <= 600) {
+                return 'phone';
+            } else if (screenWidth <= 1024) {
+                return 'tablet';
+            } else {
+                return 'desktop';
+            }
+        }
+
+        // Global device variable
+        const DEVICE_TYPE = detectDevice();
+
+        // Function to apply device-specific CSS
+        function applyDeviceStyles() {
+            const root = document.documentElement;
+            
+            if (DEVICE_TYPE === 'phone') {
+                // Phone-specific adjustments
+                root.style.setProperty('--device-type', 'phone');
+                document.body.classList.add('mobile-device');
+            } else if (DEVICE_TYPE === 'tablet') {
+                root.style.setProperty('--device-type', 'tablet');
+                document.body.classList.add('tablet-device');
+            } else {
+                root.style.setProperty('--device-type', 'desktop');
+                document.body.classList.add('desktop-device');
+            }
+        }
+
+        // Apply device styles immediately
+        applyDeviceStyles();
+
+        // Re-detect on window resize (for rotation changes)
+        window.addEventListener('orientationchange', function() {
+            location.reload(); // Reload on device rotation for best layout
+        });
+
+        // Handle window resize for responsive adjustments
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                const newDevice = detectDevice();
+                if (newDevice !== DEVICE_TYPE) {
+                    location.reload(); // Reload if device type changes
+                }
+            }, 250);
+        });
 
         const map = L.map('map', {
             center: [48.8566, 2.3522], 
