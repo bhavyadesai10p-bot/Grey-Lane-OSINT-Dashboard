@@ -863,6 +863,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     
     <script>
+        // 1. ADD THIS CONSTANT AT THE VERY TOP - REPLACE WITH YOUR ACTUAL RENDER URL
+        const BACKEND_URL = "https://grey-lane-osint-dashboard.onrender.com";
+        
+        // Global WebSocket variable for reconnection handling
+        let ws;
+
         const map = L.map('map', {
             center: [48.8566, 2.3522], 
             zoom: 13,
@@ -909,6 +915,8 @@
         } 
 
         // --- 🚇 OFFICIAL PARIS RAIL NETWORK (IDFM OPEN DATA) ---
+        // COMMENTED OUT: This endpoint is currently returning 404 errors
+        /*
         fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/traces-du-reseau-ferre-idf/exports/geojson')
             .then(response => response.json())
             .then(data => {
@@ -928,8 +936,11 @@
                 }).addTo(transitLayer); // This attaches the entire grid to your [TRANSIT: ON/OFF] button!
             })
             .catch(error => console.error("Geospatial routing error:", error));
+        */
 
         // --- 🚉 OFFICIAL PARIS STATIONS (IDFM OPEN DATA) ---
+        // COMMENTED OUT: This endpoint is currently returning 404 errors
+        /*
         fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/gares-et-stations-du-reseau-ferre-d-ile-de-france/exports/geojson')
             .then(response => response.json())
             .then(data => {
@@ -958,6 +969,7 @@
                 }).addTo(transitLayer); // Attaches to your Master Switch!
             })
             .catch(error => console.error("Station loading error:", error));
+        */
 
 
         // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
@@ -1108,7 +1120,7 @@
         // Function to load existing dots instantly on page refresh
         async function loadExistingIncidents() {
             try {
-                const response = await fetch('/api/incidents');
+                const response = await fetch(`${BACKEND_URL}/api/incidents`);
                 const result = await response.json();
                 
                 if (result.status === "success") {
@@ -1125,29 +1137,34 @@
             }
         }
 
-        const wsUrl = "wss://grey-lane-osint-dashboard.onrender.com/ws";
-        const ws = new WebSocket(wsUrl);
+        const wsUrl = `wss://${BACKEND_URL.replace('https://', '')}/ws`;
         const statusText = document.getElementById("status-text");
         const logContent = document.getElementById("log-content");
 
-        ws.onopen = function() { 
-            const liveDot = document.getElementById("live-dot");
-            if (liveDot) {
-                liveDot.style.background = "#00c851";
-                liveDot.style.boxShadow = "0 0 8px #00c851";
-            }
-            console.log("OSINT ENGINE: Connected to secure backend telemetry.");
-            // Load existing incidents on WebSocket connection
-            loadExistingIncidents();
-        };
-        ws.onclose = function() { 
-            const liveDot = document.getElementById("live-dot");
-            if (liveDot) {
-                liveDot.style.background = "#ff4444";
-                liveDot.style.boxShadow = "0 0 8px #ff4444";
-            }
-            console.log("OSINT ENGINE: Telemetry link severed.");
-        };
+        // Create a function to handle WebSocket connection and reconnection
+        function connectWebSocket() {
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() { 
+                const liveDot = document.getElementById("live-dot");
+                if (liveDot) {
+                    liveDot.style.background = "#00c851";
+                    liveDot.style.boxShadow = "0 0 8px #00c851";
+                }
+                console.log("OSINT ENGINE: Connected to secure backend telemetry.");
+                // Load existing incidents on WebSocket connection
+                loadExistingIncidents();
+            };
+            ws.onclose = function() { 
+                const liveDot = document.getElementById("live-dot");
+                if (liveDot) {
+                    liveDot.style.background = "#ff4444";
+                    liveDot.style.boxShadow = "0 0 8px #ff4444";
+                }
+                console.log("OSINT ENGINE: Telemetry link severed. Reconnecting in 5 seconds...");
+                // Auto-reconnect after 5 seconds if connection is lost
+                setTimeout(connectWebSocket, 5000);
+            };
 
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
@@ -1248,6 +1265,10 @@
                 if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
             }
         };
+        }  // End of connectWebSocket function
+
+        // Initialize WebSocket connection on page load
+        connectWebSocket();
 
         // ══════════════════════════════════════════════════════════
         // ROUTE SAFETY & ACTIVE RISK ZONE SCANNER
@@ -1417,7 +1438,7 @@
             
             try {
                 // FORCE HTTPS to your exact live Render server domain!
-                const response = await fetch('https://grey-lane-osint-dashboard.onrender.com/api/parse-incident', {
+                const response = await fetch(`${BACKEND_URL}/api/parse-incident`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: textContent })
