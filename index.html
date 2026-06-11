@@ -29,10 +29,9 @@
             --border: #333;
         }
 
-        /* --- UPDATED PANEL & MAP HEIGHTS TO CLEAR FOOTER --- */
         #map {
             width: calc(100% - var(--panel-w));
-            height: calc(100vh - 55px - 65px); /* Subtract top header and bottom bar */
+            height: calc(100vh - 55px - 65px);
             z-index: 1;
             cursor: crosshair;
             position: fixed;
@@ -45,7 +44,7 @@
             top: 55px;
             left: 0;
             width: var(--panel-w);
-            height: calc(100vh - 55px - 65px); /* Clear bottom bar height */
+            height: calc(100vh - 55px - 65px);
             background: rgba(10, 10, 10, 0.95);
             border-right: 1px solid #333;
             overflow-y: auto;
@@ -53,18 +52,13 @@
             padding: 0;
         }
 
-        .status {
-            font-size: 14px;
-            color: #00ff00;
-            margin-top: 5px;
-        }
-
+        /* --- RIGHT PANEL SPLIT FIX --- */
         .log-panel {
             position: absolute;
             top: 20px;
             right: 20px;
             width: 320px;
-            height: calc(100vh - 40px - 65px); /* Clear bottom bar height */
+            height: calc(100vh - 40px - 65px);
             background: rgba(10, 10, 10, 0.85);
             border-right: 4px solid #00d4ff;
             color: #fff;
@@ -76,24 +70,27 @@
         }
 
         .log-header {
-            padding: 15px;
+            padding: 10px;
             background: #111;
             border-bottom: 1px solid #333;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             letter-spacing: 1px;
-            color: #00d4ff;
             text-align: right;
         }
 
         .log-content {
             flex-grow: 1;
             overflow-y: auto;
-            padding: 15px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
+
+        /* Set explicit 50% heights so they don't crush each other */
+        #news-section { height: 50%; display: flex; flex-direction: column; border-bottom: 2px solid #333; }
+        #transit-section { height: 50%; display: flex; flex-direction: column; }
 
         .log-content::-webkit-scrollbar { width: 4px; }
         .log-content::-webkit-scrollbar-track { background: #000; }
@@ -114,12 +111,9 @@
         .log-entry.high { border-color: #ff0000; color: #ffdddd; }
         .log-entry.medium { border-color: #ffa500; color: #ffeedd; }
         .log-entry.low { border-color: #0096ff; color: #ddf0ff; }
+        .log-entry.transit { border-color: #00d2ff; color: #ddeeff; }
         
-        .log-time {
-            font-size: 9px;
-            color: #888;
-            margin-bottom: 5px;
-        }
+        .log-time { font-size: 9px; color: #888; margin-bottom: 5px; }
 
         @keyframes slideIn {
             from { opacity: 0; transform: translateX(20px); }
@@ -134,488 +128,23 @@
         @keyframes pulse-high { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
         @keyframes pulse-medium { 0% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 165, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 165, 0, 0); } }
 
-        .leaflet-popup-content-wrapper { 
-            background: #111; 
-            color: #fff; 
-            border: 1px solid #333; 
-        }
-        .leaflet-popup-tip { 
-            background: #111; 
-        }
+        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid #333; }
+        .leaflet-popup-tip { background: #111; }
 
-        .psec {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .stitle {
-            font-family: monospace;
-            font-size: 12px;
-            font-weight: bold;
-            color: #00d2ff;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-        }
+        .psec { padding: 16px; border-bottom: 1px solid var(--border); }
+        .stitle { font-family: monospace; font-size: 12px; font-weight: bold; color: #00d2ff; letter-spacing: 1px; margin-bottom: 12px; text-transform: uppercase; }
 
         /* Category Toggles */
-        .ctog {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px;
-            margin-bottom: 6px;
-            background: rgba(0, 0, 0, 0.3);
-            border-left: 3px solid transparent;
-            cursor: pointer;
-            transition: all 0.2s;
-            border-radius: 2px;
-        }
+        .ctog { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 6px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid transparent; cursor: pointer; transition: all 0.2s; border-radius: 2px; }
+        .ctog.active { border-left-color: #00d2ff; background: rgba(0, 210, 255, 0.1); }
+        .ctog:hover { background: rgba(255, 255, 255, 0.05); }
+        .cdot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .cname { font-size: 12px; color: #ddd; flex-grow: 1; font-family: monospace; }
+        .ccount { font-size: 11px; color: #888; font-family: monospace; font-weight: bold; }
 
-        .ctog.active {
-            border-left-color: #00d2ff;
-            background: rgba(0, 210, 255, 0.1);
-        }
-
-        .ctog:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .cdot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .cname {
-            font-size: 12px;
-            color: #ddd;
-            flex-grow: 1;
-            font-family: monospace;
-        }
-
-        .ccount {
-            font-size: 11px;
-            color: #888;
-            font-family: monospace;
-            font-weight: bold;
-        }
-
-        /* Severity Slider Row */
-        .srow {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .slbl {
-            font-size: 10px;
-            color: #888;
-            font-family: monospace;
-            letter-spacing: 1px;
-            width: 60px;
-            flex-shrink: 0;
-        }
-
-        input[type="range"] {
-            flex-grow: 1;
-            cursor: pointer;
-        }
-
-        .sval {
-            font-size: 12px;
-            color: #00d2ff;
-            font-family: monospace;
-            font-weight: bold;
-            width: 30px;
-            text-align: center;
-        }
-
-        /* Toggle Rows */
-        .togrow {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            padding: 8px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 2px;
-        }
-
-        .toglbl {
-            font-size: 12px;
-            color: #ddd;
-            font-family: monospace;
-            font-weight: bold;
-        }
-
-        .togsub {
-            font-size: 9px;
-            color: #888;
-            font-family: monospace;
-            margin-top: 2px;
-        }
-
-        /* Switch Toggle */
-        .sw {
-            position: relative;
-            display: inline-block;
-            width: 44px;
-            height: 24px;
-        }
-
-        .sw input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .sw-sl {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #333;
-            transition: 0.3s;
-            border-radius: 24px;
-        }
-
-        .sw-sl:before {
-            position: absolute;
-            content: "";
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: 0.3s;
-            border-radius: 50%;
-        }
-
-        input:checked + .sw-sl {
-            background-color: #00d2ff;
-        }
-
-        input:checked + .sw-sl:before {
-            transform: translateX(20px);
-        }
-
-        /* Heatbar */
-        #heatbar-wrap {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 8px;
-            border-radius: 2px;
-            border: 1px solid #333;
-        }
-
-        #heatbar {
-            height: 20px;
-            background: linear-gradient(90deg, #2ed573, #ffcc00, #ff8800, #ff4444);
-            border-radius: 2px;
-            margin-bottom: 6px;
-        }
-
-        #hbar-label {
-            font-size: 9px;
-            color: #888;
-            font-family: monospace;
-            text-align: center;
-        }
-
-        /* Route Inputs */
-        .rte-inputs {
-            margin-bottom: 10px;
-        }
-
-        .rte-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .rdot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .rdot.from {
-            background: #2ed573;
-        }
-
-        .rdot.to {
-            background: #ff4444;
-        }
-
-        .rte-input {
-            flex-grow: 1;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            color: #ddd;
-            padding: 6px 8px;
-            font-family: monospace;
-            font-size: 11px;
-            border-radius: 2px;
-        }
-
-        .rte-input:focus {
-            outline: none;
-            border-color: #00d2ff;
-        }
-
-        .rte-result {
-            margin-top: 8px;
-            padding: 8px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid #333;
-            border-radius: 2px;
-            font-size: 11px;
-            color: #ddd;
-            font-family: monospace;
-        }
-
-        .alt-routes {
-            margin-top: 8px;
-        }
-
-        /* AI Parser */
-        .ai-textarea {
-            width: 100%;
-            height: 80px;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            color: #ddd;
-            padding: 8px;
-            font-family: monospace;
-            font-size: 11px;
-            resize: none;
-            border-radius: 2px;
-            margin-bottom: 8px;
-            box-sizing: border-box;
-        }
-
-        .ai-textarea:focus {
-            outline: none;
-            border-color: #00d2ff;
-        }
-
-        .btn {
-            width: 100%;
-            background: #0055ff;
-            border: 1px solid #0096ff;
-            color: #fff;
-            padding: 8px;
-            font-family: monospace;
-            font-size: 11px;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 2px;
-            transition: all 0.2s;
-            margin-bottom: 8px;
-        }
-
-        .btn:hover {
-            background: #0096ff;
-        }
-
-        .btn.danger {
-            background: #ff4444;
-            border-color: #ff6666;
-        }
-
-        .btn.danger:hover {
-            background: #ff6666;
-        }
-
-        /* Loading Spinner */
-        .pi {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 12px;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #333;
-            border-radius: 2px;
-            font-family: monospace;
-            font-size: 11px;
-            color: #888;
-            margin-bottom: 8px;
-        }
-
-        .pd {
-            display: flex;
-            gap: 4px;
-        }
-
-        .pd span {
-            width: 4px;
-            height: 4px;
-            background: #00d2ff;
-            border-radius: 50%;
-            animation: pulse-dot 1.4s infinite;
-        }
-
-        .pd span:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .pd span:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
-        }
-
-        .ai-result {
-            display: none;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #333;
-            border-radius: 2px;
-            padding: 10px;
-            margin-bottom: 8px;
-            font-family: monospace;
-            font-size: 11px;
-        }
-
-        .ai-result div {
-            margin-bottom: 6px;
-        }
-
-        .fk {
-            color: #00d2ff;
-            font-weight: bold;
-        }
-
-        .fv {
-            color: #ddd;
-        }
-
-        /* Transit Line Badges */
-        .strike-item {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #333;
-            border-radius: 2px;
-            padding: 8px;
-            margin-bottom: 8px;
-        }
-
-        .stk-title {
-            font-family: monospace;
-            font-size: 11px;
-            color: #ff4444;
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
-
-        .stk-meta {
-            font-family: monospace;
-            font-size: 9px;
-            color: #888;
-            margin-bottom: 6px;
-        }
-
-        .stk-lines {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-
-        .lbadge {
-            display: inline-block;
-            background: #00d2ff;
-            color: #000;
-            padding: 3px 7px;
-            border-radius: 2px;
-            font-family: monospace;
-            font-size: 10px;
-            font-weight: bold;
-            letter-spacing: 0.5px;
-        }
-
-        .transit-tooltip { background: rgba(10, 10, 10, 0.9); border: 1px solid #444; color: #fff; font-family: monospace; font-weight: bold; }
+        .btn { width: 100%; background: #0055ff; border: 1px solid #0096ff; color: #fff; padding: 8px; font-family: monospace; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 2px; transition: all 0.2s; margin-bottom: 8px; }
+        .btn:hover { background: #0096ff; }
         
-        /* --- TACTICAL STATION TOOLTIPS --- */
-        .tactical-station-tooltip {
-            background-color: #111 !important;
-            color: #00d2ff !important;
-            border: 1px solid #00d2ff !important;
-            font-family: monospace !important;
-            font-size: 10px !important;
-            border-radius: 2px !important;
-            box-shadow: 0 0 5px rgba(0, 210, 255, 0.3) !important;
-            padding: 4px 6px !important;
-        }
-        /* Hide the little triangle arrow Leaflet puts on tooltips */
-        .leaflet-tooltip-top.tactical-station-tooltip::before {
-            display: none !important;
-        }
-
-        /* --- TACTICAL TERMINAL SCROLLBARS --- */
-        ::-webkit-scrollbar {
-            width: 6px;  /* Ultra-thin and sleek */
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0a0a0a; /* Deep terminal black */
-            border-left: 1px solid #222;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #333; 
-            border-radius: 0px; /* Sharp, military edges instead of rounded */
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #00d2ff; /* Glows cyan when the operator hovers over it */
-            box-shadow: 0 0 8px rgba(0, 210, 255, 0.5);
-        }
-
-        /* --- INTELLIGENCE FEED CARDS --- */
-        .log-entry {
-            background: rgba(17, 17, 17, 0.9);
-            border: 1px solid #333;
-            border-right: 2px solid #333; /* The 'sharp end' right bracket */
-            margin-bottom: 10px;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 12px;
-            color: #e0e0e0;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-        }
-        /* Hover effect: snaps the card forward slightly when inspecting */
-        .log-entry:hover {
-            transform: translateX(4px);
-            border-color: #555;
-        }
-        /* HIGH SEVERITY: Crimson Red edge with a threat gradient */
-        .log-entry.high {
-            border-left: 4px solid #ff4444;
-            background: linear-gradient(90deg, rgba(255, 68, 68, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
-        }
-        /* MEDIUM SEVERITY: Warning Amber edge */
-        .log-entry.medium {
-            border-left: 4px solid #ffaa00;
-            background: linear-gradient(90deg, rgba(255, 170, 0, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
-        }
-        /* LOW SEVERITY: Secure Green edge */
-        .log-entry.low {
-            border-left: 4px solid #00c851;
-            background: linear-gradient(90deg, rgba(0, 200, 81, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
-        }
-        /* TRANSIT & INFRASTRUCTURE: Cyan Blue edge */
-        .log-entry.transit {
-            border-left: 4px solid #00d2ff;
-            background: linear-gradient(90deg, rgba(0, 210, 255, 0.1) 0%, rgba(17, 17, 17, 0.9) 80%);
-        }
-
         /* --- COMMAND HEADER STYLING --- */
         #top-header {
             position: fixed; top: 0; left: 0; right: 0; height: 55px;
@@ -624,24 +153,16 @@
             padding: 0 20px; z-index: 2000; box-sizing: border-box;
         }
         .header-left { display: flex; align-items: center; gap: 15px; }
-        
-        /* The Pulsing Live Dot */
-        #live-dot {
-            width: 8px; height: 8px; border-radius: 50%; background: #00c851;
-            box-shadow: 0 0 8px #00c851; animation: pulse 2s infinite;
-        }
+        #live-dot { width: 8px; height: 8px; border-radius: 50%; background: #00c851; box-shadow: 0 0 8px #00c851; animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 8px #00c851; } 50% { opacity: 0.4; box-shadow: 0 0 2px #00c851; } }
         
-        /* Stats Block */
         #header-stats { display: flex; align-items: center; gap: 20px; }
         .stat-box { display: flex; flex-direction: column; align-items: center; }
         .stat-val { font-family: monospace; font-size: 18px; color: #ddeeff; font-weight: bold; line-height: 1; }
         .stat-lbl { font-family: monospace; font-size: 9px; color: #8899aa; letter-spacing: 1.5px; margin-top: 2px; }
         .stat-line { width: 1px; height: 25px; background: #222d3d; }
-        
         #header-clock { font-family: monospace; font-size: 13px; color: #00d2ff; letter-spacing: 1px; }
-        
-        /* --- TACTICAL CLUSTER OVERRIDES --- */
+
         .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { background: rgba(0,0,0,0.6) !important; }
         .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
             background: #151a22 !important; color: #00d2ff !important;
@@ -650,314 +171,24 @@
         }
 
         /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
-        /* --- PURE FIXED AUTHORITY BOTTOM BAR --- */
         #bottom-authority-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100vw; /* Forces the bar to span the entire screen width */
-            height: 65px;
-            background: #07090c;
-            border-top: 1px solid #1a222d;
-            z-index: 3000;
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
-            box-sizing: border-box;
-            gap: 30px; /* Gives nice breathing room between logos and text */
+            position: fixed; bottom: 0; left: 0; width: 100vw; height: 65px;
+            background: #07090c; border-top: 1px solid #1a222d; z-index: 3000;
+            display: flex; align-items: center; padding: 0 20px; box-sizing: border-box; gap: 30px;
         }
-
-        .footer-logo-group {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex-shrink: 0; /* Prevents logos from getting crushed */
-        }
-
-        .footer-gl-main {
-            height: 48px;
-            border-right: 1px solid #1a222d;
-            padding-right: 15px;
-        }
-
-        .footer-logo-img {
-            height: 24px;
-            object-fit: contain;
-            filter: none;
-            opacity: 0.9;
-            border-radius: 2px;
-        }
-
+        .footer-logo-group { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+        .footer-gl-main { height: 48px; border-right: 1px solid #1a222d; padding-right: 15px; }
+        .footer-logo-img { height: 24px; object-fit: contain; opacity: 0.9; border-radius: 2px; }
         .footer-legal-text {
-            flex: 1; /* This is the magic line! It forces the text to stretch horizontally */
-            font-family: monospace;
-            font-size: 8px;
-            color: #556677;
-            line-height: 1.5;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            text-align: justify; /* Makes it look like a clean, solid block of legal text */
-            padding-right: 20px;
+            flex: 1; font-family: monospace; font-size: 8px; color: #556677; line-height: 1.5;
+            letter-spacing: 0.5px; text-transform: uppercase; text-align: justify; padding-right: 20px;
         }
 
-        /* ==========================================================================
-           ADVANCED RESPONSIVE DESIGN - AUTO-DETECTS PHONE VS PC
-           Breakpoints: Phone (≤600px) | Tablet (601-1024px) | Desktop (>1024px)
-           ========================================================================== */
-
-        /* ────────────────────────────────────────────────────────────
-           PHONE LAYOUT (≤600px) - Split-Screen Frozen Map UI
-           ──────────────────────────────────────────────────────────── */
-        @media screen and (max-width: 600px) {
-            * { box-sizing: border-box; }
-
-            /* 1. SCROLLING BODY WITH ROOM FOR FROZEN TOP HALF */
-            body {
-                display: flex !important;
-                flex-direction: column !important;
-                background-color: #05070a !important; 
-                min-height: 100vh;
-                overflow-y: auto !important; 
-                /* Pushes the scrolling cards down exactly below the frozen map */
-                padding: calc(60px + 40vh + 15px) 15px 30px 15px !important; 
-                margin: 0 !important;
-            }
-
-            /* 2. FROZEN HEADER (Permanently locked to the top edge) */
-            #top-header {
-                position: fixed !important; 
-                top: 0 !important;
-                left: 0 !important;
-                width: 100vw !important;
-                height: 60px !important;
-                padding: 0 15px !important;
-                background: rgba(10, 13, 18, 0.98) !important;
-                border-bottom: none !important;
-                z-index: 2000 !important;
-                display: flex !important;
-                justify-content: space-between !important;
-            }
-            #logo-block span { font-size: 18px !important; } 
-            #header-stats { gap: 12px !important; }
-            .stat-val { font-size: 16px !important; }
-            .stat-lbl { font-size: 8px !important; }
-            #header-clock { display: none !important; } 
-
-            /* 3. FROZEN MAP (Permanently locked right under the header) */
-            #map {
-                position: fixed !important; 
-                top: 60px !important;
-                left: 0 !important;
-                width: 100vw !important;
-                height: 40vh !important; /* Map takes exactly 40% of phone height */
-                border-radius: 0 !important;
-                border-bottom: 2px solid #00d2ff !important; /* Glowing bottom edge */
-                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8) !important;
-                z-index: 1000 !important; /* High Z-index makes scrolling cards slide *under* it! */
-            }
-
-            /* 4. MAGIC UN-WRAPPER (Lets us shuffle the cards) */
-            #panel-left {
-                display: contents !important; 
-            }
-            
-            /* 5. APP WIDGET CARDS (The scrolling elements) */
-            .psec {
-                position: relative !important;
-                background: #10141a !important; 
-                border: 1px solid #1e2632 !important;
-                border-radius: 12px !important; 
-                margin-bottom: 15px !important;
-                padding: 18px !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                z-index: 10 !important; 
-            }
-            
-            .stitle {
-                font-size: 13px !important;
-                border-bottom: 1px solid #222d3d !important;
-                padding-bottom: 10px !important;
-                margin-bottom: 15px !important;
-            }
-
-            /* 6. EXACT CARD ORDERING (Categories -> Authority Bar -> Everything Else) */
-            
-            #panel-left .psec:nth-child(1) { order: 2 !important; } /* 2nd: Categories Card */
-            
-            /* 3rd: The Brought-Back Authority Bar! */
-            #bottom-authority-bar { 
-                display: flex !important; 
-                order: 3 !important; 
-                position: relative !important;
-                width: 100% !important;
-                height: auto !important;
-                bottom: auto !important;
-                left: auto !important;
-                flex-direction: column !important;
-                background: #0a0d12 !important; 
-                border: 1px solid #1e2632 !important;
-                border-radius: 12px !important;
-                margin-bottom: 15px !important;
-                padding: 20px 15px !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                z-index: 10 !important;
-            }
-            .footer-logo-group {
-                width: 100% !important;
-                flex-wrap: wrap !important;
-                justify-content: center !important;
-                gap: 15px !important;
-            }
-            .footer-gl-main {
-                border-right: none !important;
-                padding-right: 0 !important;
-                margin-bottom: 5px !important;
-                height: 35px !important;
-            }
-            .footer-legal-text {
-                font-size: 8px !important;
-                text-align: center !important;
-                padding-right: 0 !important;
-                color: #556677 !important;
-            }
-
-            /* The rest of the standard panels */
-            #panel-left .psec:nth-child(2) { order: 4 !important; } /* 4th: Filters */
-            #panel-left .psec:nth-child(3) { order: 5 !important; } /* 5th: Route Safety */
-            #panel-left .psec:nth-child(4) { order: 6 !important; } /* 6th: AI Parser */
-            #panel-left .psec:nth-child(5) { order: 7 !important; } /* 7th: Transit Lines */
-            
-            /* 7. MODERN FEED (Intelligence Log locked to the very bottom) */
-            .log-panel {
-                order: 1 !important;
-                position: relative !important; 
-                width: 100% !important;
-                height: auto !important;
-                max-height: none !important; 
-                background: transparent !important;
-                border: none !important;
-                box-shadow: none !important;
-                padding: 0 !important;
-                z-index: 10 !important;
-                top: auto !important;   
-                right: auto !important; 
-            }
-            .log-header {
-                background: transparent !important;
-                border-bottom: 2px solid #00d4ff !important;
-                text-align: left !important;
-                padding: 0 0 10px 0 !important;
-                font-size: 14px !important;
-                margin-bottom: 15px !important;
-            }
-            .log-content {
-                padding: 0 !important;
-                max-height: none !important; 
-                overflow-y: visible !important;
-            }
-            .log-entry {
-                border-radius: 8px !important; 
-                border-right: none !important;
-                background: #14181f !important;
-                padding: 12px !important;
-                margin-bottom: 10px !important;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
-            }
-
-            /* 8. THUMB-FRIENDLY BUTTONS */
-            button, .btn {
-                width: 100% !important;
-                padding: 14px !important;
-                font-size: 13px !important;
-                font-weight: 800 !important;
-                letter-spacing: 1px !important;
-                margin: 8px 0 !important;
-                min-height: 48px !important; 
-                border-radius: 8px !important;
-                text-transform: uppercase !important;
-            }
-            
-            input[type="text"], .ai-textarea {
-                background: #0b0e12 !important;
-                border: 1px solid #222d3d !important;
-                border-radius: 6px !important;
-                padding: 12px !important;
-                font-size: 16px !important; 
-            }
-
-            .leaflet-popup-content-wrapper { max-width: 75vw !important; border-radius: 8px !important; }
-            .leaflet-popup-content { font-size: 11px !important; padding: 5px !important; }
-        }
-
-        /* ────────────────────────────────────────────────────────────
-           TABLET LAYOUT (601px - 1024px) - Medium Screens
-           ──────────────────────────────────────────────────────────── */
-        @media screen and (min-width: 601px) and (max-width: 1024px) {
-            
-            #map {
-                width: 100% !important;
-                height: 55vh !important;
-                position: relative !important;
-                top: auto !important;
-            }
-
-            .panel {
-                width: 100% !important;
-                height: auto !important;
-                position: relative !important;
-                max-height: 45vh !important;
-                overflow-y: auto !important;
-            }
-
-            button, .btn {
-                padding: 12px !important;
-                font-size: 13px !important;
-            }
-
-            .log-panel {
-                position: relative !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                right: auto !important;
-                top: auto !important;
-                height: auto !important;
-                max-height: 40vh !important;
-            }
-        }
-
-        /* ────────────────────────────────────────────────────────────
-           DESKTOP LAYOUT (>1024px) - Full Side-by-Side Layout
-           ──────────────────────────────────────────────────────────── */
-        @media screen and (min-width: 1025px) {
-            /* Keep original desktop layout */
-            body {
-                display: flex;
-                flex-direction: row;
-            }
-
-            #map {
-                position: fixed !important;
-                left: var(--panel-w) !important;
-                top: 55px !important;
-                width: calc(100% - var(--panel-w)) !important;
-                height: calc(100vh - 55px - 65px) !important;
-            }
-
-            .panel {
-                position: fixed !important;
-                left: 0 !important;
-                top: 55px !important;
-                width: var(--panel-w) !important;
-                height: calc(100vh - 55px - 65px) !important;
-                display: block !important;
-            }
-
-            button, .btn {
-                width: 100% !important;
-                padding: 10px !important;
-                font-size: 13px !important;
-            }
-        }
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; border-left: 1px solid #222; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 0px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00d2ff; box-shadow: 0 0 8px rgba(0, 210, 255, 0.5); }
     </style>
 </head>
 <body>
@@ -982,840 +213,205 @@
         <div id="header-clock">--:--:-- CET</div>
     </div>
 
-    <!-- LEFT PANEL (Main Project Upgrade) -->
     <div id="panel-left" class="panel">
 
-      <!-- 1. LIVE CATEGORIES CONTROLLER -->
       <div class="psec">
         <div class="stitle">Categories</div>
-        <div class="ctog active" data-cat="A" onclick="toggleCat('A')"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Civil Unrest</div><div class="ccount" id="cA">0</div></div>
-        <div class="ctog active" data-cat="B" onclick="toggleCat('B')"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Property Damage</div><div class="ccount" id="cB">0</div></div>
-        <div class="ctog active" data-cat="C" onclick="toggleCat('C')"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">0</div></div>
-        <div class="ctog active" data-cat="E" onclick="toggleCat('E')"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">0</div></div>
-        <!-- Transit pushed to the bottom -->
-        <div class="ctog active" data-cat="D" onclick="toggleCat('D')"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit & Infra</div><div class="ccount" id="cD">0</div></div>
+        <div class="ctog active"><div class="cdot" style="background:var(--cat-a)"></div><div class="cname">Intel & News</div><div class="ccount" id="cA">0</div></div>
+        <div class="ctog active"><div class="cdot" style="background:var(--cat-b)"></div><div class="cname">Hazard & Damage</div><div class="ccount" id="cB">0</div></div>
+        <div class="ctog active"><div class="cdot" style="background:var(--cat-c)"></div><div class="cname">Street Crime</div><div class="ccount" id="cC">0</div></div>
+        <div class="ctog active"><div class="cdot" style="background:var(--cat-e)"></div><div class="cname">High Security</div><div class="ccount" id="cE">0</div></div>
+        <div class="ctog active"><div class="cdot" style="background:var(--cat-d)"></div><div class="cname">Transit Alerts</div><div class="ccount" id="cD">0</div></div>
       </div>
-
-      <!-- 2. MAP CONTROLS & TEMPORAL MATRIX -->
-      <div class="psec">
-        <div class="stitle">Filters</div>
-        <div class="srow">
-          <div class="slbl">MIN SEV</div>
-          <input type="range" id="sev-sl" min="1" max="5" value="1" oninput="onSev(this.value)">
-          <div class="sval" id="sev-v">1</div>
-        </div>
-        <div style="margin-top:14px">
-          <div class="togrow">
-            <div><div class="toglbl">Verified only</div><div class="togsub">Hide unconfirmed</div></div>
-            <label class="sw"><input type="checkbox" id="tog-vfd" onchange="applyFilters()"><span class="sw-sl"></span></label>
-          </div>
-          <div class="togrow">
-            <div><div class="toglbl">Transit overlay</div><div class="togsub">Métro + RER lines</div></div>
-            <label class="sw"><input type="checkbox" id="tog-transit" onchange="toggleTransit(this.checked)"><span class="sw-sl"></span></label>
-          </div>
-          <div class="togrow">
-            <div><div class="toglbl">Cluster markers</div><div class="togsub">Group nearby pins</div></div>
-            <label class="sw"><input type="checkbox" id="tog-cluster" checked onchange="toggleClusterMode(this.checked)"><span class="sw-sl"></span></label>
-          </div>
-        </div>
-
-        <div style="margin-top:14px">
-          <div class="slbl" style="margin-bottom:8px">TEMPORAL DENSITY</div>
-          <div id="heatbar-wrap">
-            <div id="heatbar"></div>
-            <div id="hbar-label">All 24h · <span id="hbar-active">All incidents</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. TACTICAL ROUTE SAFETY -->
-      <div class="psec">
-        <div class="stitle">Route Safety</div>
-        <div class="rte-inputs">
-          <div class="rte-row"><div class="rdot from"></div><input type="text" class="rte-input" id="rte-from" placeholder="From: click map or type"></div>
-          <div class="rte-row"><div class="rdot to"></div><input type="text" class="rte-input" id="rte-to" placeholder="To: click map or type"></div>
-        </div>
-        <button class="btn" onclick="checkRoute()">▶ CHECK ROUTE</button>
-        <div class="rte-result" id="rte-result"></div>
-        <div class="alt-routes" id="alt-routes"></div>
-      </div>
-
-      <!-- 4. INDEPENDENT AI INCIDENT PARSER -->
-      <div class="psec">
-        <div class="stitle">AI Incident Parser</div>
-        <textarea class="ai-textarea" id="ai-inp" placeholder='Paste raw social / Telegram / news text&#10;&#10;e.g. "manif bd saint-germain CRS gaz lacrymogène"'></textarea>
-        <button class="btn" onclick="parseAI()">⚡ PARSE VIA ENGINE</button>
-        <div class="pi" id="pi"><div class="pd"><span></span><span></span><span></span></div>ANALYSING...</div>
-        <div class="ai-result" id="ai-res"></div>
-        <button class="btn danger" id="ai-add" style="display:none;margin-top:6px" onclick="addParsed()">＋ ADD TO MAP</button>
-      </div>
-
-      <!-- 5. REAL-TIME TRANSIT LINE BADGES (Pinned to Bottom) -->
-      <div class="psec">
-        <div class="stitle">Active Line Operations</div>
-        <div id="live-strike-calendar">
-          <!-- Generated Dynamically from your IDFM Backend Pipeline -->
-        </div>
-      </div>
-
     </div>
 
     <div class="log-panel">
-        <div class="log-header">▶ LIVE INTELLIGENCE LOG</div>
-        <div class="log-content" id="log-content"></div>
+        <div id="news-section">
+            <div class="log-header" style="color: #ffaa00;">🚨 LIVE BREAKING NEWS</div>
+            <div class="log-content" id="news-log-content"></div>
+        </div>
+
+        <div id="transit-section">
+            <div class="log-header" style="color: #00d2ff; border-top: none;">🚇 TRANSIT ALERTS</div>
+            <div class="log-content" id="transit-log-content"></div>
+        </div>
     </div>
 
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     
     <script>
-        // 1. ADD THIS CONSTANT AT THE VERY TOP - REPLACE WITH YOUR ACTUAL RENDER URL
+        // BACKEND URL
         const BACKEND_URL = "https://greylane-grey-lane-osint-backend.hf.space";
-        
-        // Global WebSocket variable for reconnection handling
         let ws;
 
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // AUTO-DETECT DEVICE TYPE & APPLY RESPONSIVE BEHAVIOR
-        // ═══════════════════════════════════════════════════════════════════════════════
-        
-        // Function to detect device type
-        function detectDevice() {
-            const userAgent = navigator.userAgent;
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-            const screenWidth = window.innerWidth;
-            
-            if (screenWidth <= 600) {
-                return 'phone';
-            } else if (screenWidth <= 1024) {
-                return 'tablet';
-            } else {
-                return 'desktop';
-            }
-        }
-
-        // Global device variable
-        const DEVICE_TYPE = detectDevice();
-
-        // Function to apply device-specific CSS
-        function applyDeviceStyles() {
-            const root = document.documentElement;
-            
-            if (DEVICE_TYPE === 'phone') {
-                // Phone-specific adjustments
-                root.style.setProperty('--device-type', 'phone');
-                document.body.classList.add('mobile-device');
-            } else if (DEVICE_TYPE === 'tablet') {
-                root.style.setProperty('--device-type', 'tablet');
-                document.body.classList.add('tablet-device');
-            } else {
-                root.style.setProperty('--device-type', 'desktop');
-                document.body.classList.add('desktop-device');
-            }
-        }
-
-        // Apply device styles immediately
-        applyDeviceStyles();
-
-        // Re-detect on window resize (for rotation changes)
-        window.addEventListener('orientationchange', function() {
-            location.reload(); // Reload on device rotation for best layout
-        });
-
-        // Handle window resize for responsive adjustments
-        let resizeTimer;
-        window.addEventListener('resize', function() {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function() {
-                const newDevice = detectDevice();
-                if (newDevice !== DEVICE_TYPE) {
-                    location.reload(); // Reload if device type changes
-                }
-            }, 250);
-        });
-
-        const map = L.map('map', {
-            center: [48.8566, 2.3522], 
-            zoom: 13,
-            zoomControl: false
-        });
+        const map = L.map('map', { center: [48.8566, 2.3522], zoom: 13, zoomControl: false });
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
 
-        // --- LIVE CLOCK ---
+        // LIVE CLOCK
         setInterval(() => {
             const now = new Date();
             document.getElementById('header-clock').innerText = now.toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false}) + ' CET';
         }, 1000);
-        // --- TACTICAL CLUSTER GROUP ---
-        const masterCluster = L.markerClusterGroup({
-            maxClusterRadius: 40,
-            spiderfyOnMaxZoom: true,
-            showCoverageOnHover: false,
-            zoomToBoundsOnClick: true
-        });
+
+        // CLUSTER GROUP
+        const masterCluster = L.markerClusterGroup({ maxClusterRadius: 40 });
         map.addLayer(masterCluster);
 
-        // --- TACTICAL DATA LAYERS ---
-        const transitLayer = L.layerGroup().addTo(map);
-        let isTransitVisible = true;
-
-        // The Master Switch Function
-        function toggleTransit(isChecked) {
-            const checkbox = document.getElementById('tog-transit');
-            if (isChecked !== undefined) {
-                // Called from checkbox onchange
-                isTransitVisible = isChecked;
-            } else {
-                // Called from code
-                isTransitVisible = !isTransitVisible;
-                if (checkbox) checkbox.checked = isTransitVisible;
-            }
-            
-            if (isTransitVisible) {
-                map.addLayer(transitLayer);
-            } else {
-                map.removeLayer(transitLayer);
-            }
-        } 
-
-        // --- 🚇 OFFICIAL PARIS RAIL NETWORK (IDFM OPEN DATA) ---
-        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/traces-du-reseau-ferre-idf/exports/geojson')
-            .then(response => {
-                if (!response.ok) throw new Error("Transit Network API unavailable");
-                return response.json();
-            })
-            .then(data => {
-                L.geoJSON(data, {
-                    style: function (feature) {
-                        // IDFM often provides the official hex color. If missing, default to a dark tactical grey.
-                        let props = feature.properties;
-                        let rawColor = props.colourweb_hexa || props.couleur_hexa || props.route_color || '333333'; 
-                        let cleanColor = rawColor.replace('#', ''); // Ensure no double hash
-                        
-                        return {
-                            color: `#${cleanColor}`,
-                            weight: 2,
-                            opacity: 0.4 // Kept dim so your glowing blue alerts stand out on top
-                        };
-                    }
-                }).addTo(transitLayer); // Attaches to the Master Switch
-            })
-            .catch(error => console.warn("Transit Network lines currently offline:", error));
-
-        // --- 🚉 OFFICIAL PARIS STATIONS (IDFM OPEN DATA) ---
-        fetch('https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/emplacement-des-gares-idf/exports/geojson')
-            .then(response => {
-                if (!response.ok) throw new Error("Station API unavailable");
-                return response.json();
-            })
-            .then(data => {
-                L.geoJSON(data, {
-                    // pointToLayer tells Leaflet how to draw point data (stations)
-                    pointToLayer: function (feature, latlng) {
-                        return L.circleMarker(latlng, {
-                            radius: 2.5,          // Shrunk down to look like tiny grid nodes
-                            fillColor: "#00d2ff", // Tactical cyan to match the Grey Lane theme
-                            color: "#00d2ff",     // Border matches the fill color
-                            weight: 1,            // Hairline thin border
-                            opacity: 0.3,         // 70% transparent so it fades perfectly into the dark map
-                            fillOpacity: 0.15     // Very faint, hollow center
-                        });
-                    },
-                    // onEachFeature attaches the name tooltip to every single station
-                    onEachFeature: function (feature, layer) {
-                        let stationName = feature.properties.nom_long || feature.properties.nom_gare || "Station";
-                        layer.bindTooltip(`[ ${stationName} ]`, {
-                            direction: 'top',
-                            className: 'tactical-station-tooltip',
-                            opacity: 0.9
-                        });
-                    }
-                }).addTo(transitLayer); // Attaches to the Master Switch
-            })
-            .catch(error => console.warn("Transit Stations currently offline:", error));
-
-
-        // --- CHRONIC RED ZONE HEATMAP (Pickpockets, Scams, High-Theft) ---
-        // Format: [Latitude, Longitude, Intensity 0.0 to 1.0]
-        const parisRedZones = [
-            [48.8809, 2.3553, 1.0], // Gare du Nord (Aggressive pickpocketing)
-            [48.8867, 2.3431, 0.9], // Sacré-Cœur/Montmartre (String bracelet scam, pickpockets)
-            [48.8584, 2.2945, 0.85], // Eiffel Tower Base (Distraction theft)
-            [48.8606, 2.3376, 0.8], // Louvre Museum entry points (Professional rings)
-            [48.8625, 2.3475, 0.75], // Châtelet-Les Halles underground (Muggings, transit theft)
-            [48.8708, 2.3051, 0.7], // Champs-Élysées (Luxury theft, distraction)
-            [48.8768, 2.3592, 0.65], // Gare de l'Est (Luggage theft)
-            [48.8529, 2.3500, 0.6]  // Notre Dame area (Tourist distraction)
-        ];
-
-        // Create the heat layer with tactical visual settings
-        const threatHeatLayer = L.heatLayer(parisRedZones, {
-            radius: 35,
-            blur: 25,
-            maxZoom: 15,
-            gradient: {0.4: '#ffed4a', 0.65: '#fa8231', 1.0: '#eb3b5a'} // Tactical Yellow -> Orange -> Red
-        });
-
-        function toggleHeatmap(isOn) {
-            if (isOn) {
-                map.addLayer(threatHeatLayer);
-            } else {
-                map.removeLayer(threatHeatLayer);
-            }
-        }
-
         let activeIncidents = []; 
-        let routeLayer = L.layerGroup().addTo(map);
-        let inputMode = 'from', coordFrom = null, coordTo = null;
 
-        map.on('click', function(e) {
-            const ll = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-            if (inputMode === 'from') {
-                coordFrom = [e.latlng.lat, e.latlng.lng];
-                document.getElementById('rte-from').value = "🎯 " + ll;
-                inputMode = 'to';
-                document.getElementById('rte-from').style.borderColor = '#444';
-                document.getElementById('rte-to').style.borderColor = '#00d4ff';
-            } else if (inputMode === 'to') {
-                coordTo = [e.latlng.lat, e.latlng.lng];
-                document.getElementById('rte-to').value = "🎯 " + ll;
-                inputMode = null;
-                document.getElementById('rte-to').style.borderColor = '#444';
-            }
-        });
-
-        document.getElementById('rte-from').onclick = () => { inputMode = 'from'; document.getElementById('rte-from').style.borderColor = '#00d4ff'; document.getElementById('rte-to').style.borderColor = '#444'; };
-        document.getElementById('rte-to').onclick = () => { inputMode = 'to'; document.getElementById('rte-to').style.borderColor = '#00d4ff'; document.getElementById('rte-from').style.borderColor = '#444'; };
-
-        async function calculateRoute() {
-            if (!coordFrom || !coordTo) {
-                alert("OSINT SYSTEM: Please click on the map twice to set an Origin and Destination.");
-                return;
-            }
-            
-            const resBox = document.getElementById('rte-result');
-            resBox.style.display = 'block';
-            resBox.style.background = '#222';
-            resBox.style.border = '1px solid #444';
-            resBox.style.color = '#fff';
-            resBox.innerHTML = '⏳ Calculating tactical vector...';
-            
-            // FORCE HTTPS to prevent mixed-content deployment blocks
-            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordFrom[1]},${coordFrom[0]};${coordTo[1]},${coordTo[0]}?overview=full&geometries=geojson`;
-            
-            try {
-                const response = await fetch(osrmUrl);
-                if (!response.ok) throw new Error("Routing API service unavailable");
-                
-                const data = await response.json();
-                if (!data.routes || data.routes.length === 0) {
-                    throw new Error("No navigable routes found across sectors");
-                }
-                
-                // Clear any old routing lines on the map
-                routeLayer.clearLayers();
-                if (window.currentRouteLine) {
-                    map.removeLayer(window.currentRouteLine);
-                }
-                
-                const routeGeoJSON = data.routes[0].geometry;
-                const realRouteLine = L.geoJSON(routeGeoJSON, {
-                    style: { color: '#00d2ff', weight: 4, opacity: 0.8, dashArray: '5, 10' }
-                }).addTo(routeLayer);
-                
-                // Draw start and end markers
-                L.circleMarker(coordFrom, {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
-                L.circleMarker(coordTo, {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
-                
-                // Fit map view tightly to the calculated path
-                map.fitBounds(realRouteLine.getBounds(), {padding: [50, 50]});
-                resBox.innerHTML = '✓ SECURE ROUTE CALCULATED';
-                resBox.style.background = 'rgba(0, 210, 255, 0.1)';
-                resBox.style.border = '1px solid #00d2ff';
-                resBox.style.color = '#00d2ff';
-                
-                // Check for threats on route
-                const dangerZone = realRouteLine.getBounds().pad(0.015);
-                const threatsOnRoute = activeIncidents.filter(h => dangerZone.contains([h.lat, h.lng]));
-                
-                if (threatsOnRoute.length === 0) {
-                    resBox.style.background = 'rgba(0, 255, 0, 0.1)';
-                    resBox.style.border = '1px solid #00ff00';
-                    resBox.style.color = '#00ff00';
-                    resBox.innerHTML = '✓ PATH CLEAR.<br>No live threats detected on this street route.';
-                } else {
-                    resBox.style.background = 'rgba(255, 0, 0, 0.1)';
-                    resBox.style.border = '1px solid #ff4757';
-                    resBox.style.color = '#ff4757';
-                    resBox.innerHTML = `⚠ WARNING: <b>${threatsOnRoute.length} hazard(s)</b> detected intersecting your street path.`;
-                    threatsOnRoute.forEach(threat => {
-                        L.circle([threat.lat, threat.lng], {radius: 300, color: '#ff0000', fillOpacity: 0.2, weight: 1})
-                        .addTo(routeLayer)
-                        .bindTooltip("THREAT RADIUS", {permanent: false});
-                    });
-                }
-            } catch (error) {
-                console.error("Route Safety Engine Error:", error);
-                resBox.innerHTML = '⚠ ROUTING ERROR: FALLBACK APPLIED';
-                resBox.style.background = 'rgba(255, 100, 68, 0.1)';
-                resBox.style.border = '1px solid #ff6644';
-                resBox.style.color = '#ff6644';
-                
-                // Fallback: Clear freeze and draw standard sector-to-sector vector line
-                routeLayer.clearLayers();
-                if (window.currentRouteLine) map.removeLayer(window.currentRouteLine);
-                
-                window.currentRouteLine = L.polyline([[coordFrom.lat, coordFrom.lng], [coordTo.lat, coordTo.lng]], {
-                    color: '#ff4444',
-                    weight: 2,
-                    opacity: 0.5,
-                    dashArray: '2, 5'
-                }).addTo(routeLayer);
-                
-                // Draw fallback markers
-                L.circleMarker([coordFrom.lat, coordFrom.lng], {radius: 6, color: '#00d4ff', fillColor: '#00d4ff', fillOpacity: 0.8}).addTo(routeLayer);
-                L.circleMarker([coordTo.lat, coordTo.lng], {radius: 6, color: '#ff4757', fillColor: '#ff4757', fillOpacity: 0.8}).addTo(routeLayer);
-                
-                map.fitBounds(window.currentRouteLine.getBounds(), {padding: [50, 50]});
-            }
-        }
-
-        // Function to load existing dots instantly on page refresh
         async function loadExistingIncidents() {
             try {
                 const response = await fetch(`${BACKEND_URL}/api/incidents`);
                 const result = await response.json();
-                
                 if (result.status === "success") {
-                    result.data.forEach(incident => {
-                        // Use your existing marker-plotting logic here
-                        // Example:
-                        const markerColor = incident.category === 'LOCAL_INTEL' ? 'yellow' : 'blue';
-                        plotMarkerOnMap(incident.lat, incident.lng, incident.description, markerColor);
-                    });
-                    console.log(`Loaded ${result.data.length} historical dots instantly!`);
+                    result.data.forEach(inc => processIncidentData(inc));
                 }
-            } catch (error) {
-                console.error("Failed to preload historical data:", error);
-            }
+            } catch (error) { console.error("Failed preload:", error); }
         }
 
         const wsUrl = `wss://${BACKEND_URL.replace('https://', '')}/ws`;
-        const statusText = document.getElementById("status-text");
-        const logContent = document.getElementById("log-content");
 
-        // Create a function to handle WebSocket connection and reconnection
         function connectWebSocket() {
             ws = new WebSocket(wsUrl);
-            
             ws.onopen = function() { 
-                const liveDot = document.getElementById("live-dot");
-                if (liveDot) {
-                    liveDot.style.background = "#00c851";
-                    liveDot.style.boxShadow = "0 0 8px #00c851";
-                }
-                console.log("OSINT ENGINE: Connected to secure backend telemetry.");
-                // Load existing incidents on WebSocket connection
+                document.getElementById("live-dot").style.background = "#00c851";
                 loadExistingIncidents();
             };
             ws.onclose = function() { 
-                const liveDot = document.getElementById("live-dot");
-                if (liveDot) {
-                    liveDot.style.background = "#ff4444";
-                    liveDot.style.boxShadow = "0 0 8px #ff4444";
-                }
-                console.log("OSINT ENGINE: Telemetry link severed. Reconnecting in 5 seconds...");
-                // Auto-reconnect after 5 seconds if connection is lost
+                document.getElementById("live-dot").style.background = "#ff4444";
                 setTimeout(connectWebSocket, 5000);
             };
 
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            if (data.event === "new_incident") {
-                const inc = data.incident;
-                activeIncidents.push(inc);
-                if(activeIncidents.length > 50) activeIncidents.shift(); 
-                
-                document.getElementById('stat-active').innerText = activeIncidents.length;
-                
-                // 🛡️ SAFE SEVERITY PARSING: Fixes the Number/String Crash!
-                let rawSev = String(inc.severity || "low").toLowerCase();
-                let isHigh = rawSev.includes("high") || rawSev.includes("5") || rawSev.includes("4");
-                let isMed = rawSev.includes("medium") || rawSev.includes("3") || rawSev.includes("warning");
-                
-                let critCount = activeIncidents.filter(item => {
-                    let s = String(item.severity || "").toLowerCase();
-                    return s.includes("high") || s.includes("5") || s.includes("4");
-                }).length;
-                document.getElementById('stat-crit').innerText = critCount;
-                
-                let transitCount = activeIncidents.filter(item => item.category === 'TRANSIT').length;
-                document.getElementById('stat-transit-cnt').innerText = transitCount;
-                
-                let sevClass = isHigh ? "severity-high" : (isMed ? "severity-medium" : "severity-low");
-                
-                // --- CUSTOM TACTICAL STYLING ENGINE ---
-                let customClass = `osint-marker ${sevClass}`;
-                let mSize = 14;
-                let customHtml = '';
-                let isTransit = false;
-                let markerColor = '#ddeeff'; 
-                
-                if (inc.category === 'TRANSIT') {
-                    isTransit = true;
-                    mSize = 12;
-                    markerColor = '#00d2ff'; // Cyan for Transit
-                    customHtml = '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>';
-                } else {
-                    if (isHigh) {
-                        markerColor = '#ff2d78'; mSize = 12; // Crimson Red
-                    } else if (isMed) {
-                        markerColor = '#ffa502'; mSize = 10; // Amber Yellow!
-                    } else {
-                        markerColor = '#2ed573'; mSize = 8;  // Secure Green
-                    }
-                    customHtml = `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.9; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.event === "new_incident") {
+                    processIncidentData(data.incident);
                 }
-                
-                const marker = L.marker([inc.lat, inc.lng], { 
-                    icon: L.divIcon({
-                        className: customClass, 
-                        html: customHtml,
-                        iconSize: [mSize, mSize], 
-                        iconAnchor: [mSize/2, mSize/2]
-                    }) 
-                });
-                marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
-                
-                if (inc.category !== 'TRANSIT') {
-                    marker.addTo(map); 
-                } else {
-                    marker.addTo(masterCluster); 
-                }
-                
-                marker.on('click', () => {
-                    if (window.activeImpactZone) {
-                        map.removeLayer(window.activeImpactZone);
-                    }
-                    let zoneColor = isTransit ? '#00d2ff' : (isHigh ? "#ff4444" : "#ffcc00");
-                    window.activeImpactZone = L.circle([inc.lat, inc.lng], {
-                        radius: 500,
-                        color: zoneColor,
-                        weight: 2,
-                        dashArray: "5, 8",
-                        fillColor: zoneColor,
-                        fillOpacity: 0.1
-                    }).addTo(map);
-                });
+            };
+        }
 
-                const timeString = new Date().toLocaleTimeString([], { hour12: false });
-                const shortDesc = inc.description.split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
-                const logEntry = document.createElement('div');
-                
-                let logLevel = isTransit ? 'transit' : (isHigh ? 'high' : (isMed ? 'medium' : 'low'));
-                logEntry.className = `log-entry ${logLevel}`;
-                logEntry.innerHTML = `
-                    <div class="log-time">[${timeString}] SYSTEM DROP</div>
-                    <strong style="color: #fff;">[ ${inc.category} ]</strong><br>
-                    ${shortDesc}
-                `;
-                logEntry.onclick = () => {
-                    map.flyTo([inc.lat, inc.lng], 15, { animate: true, duration: 1.5 });
-                    marker.openPopup();
-                    marker.fire('click'); 
-                };
-                logContent.prepend(logEntry);
-                if (logContent.children.length > 50) logContent.removeChild(logContent.lastChild);
-            }
-        };
-        }  // End of connectWebSocket function
-
-        // Initialize WebSocket connection on page load
         connectWebSocket();
 
-        // ══════════════════════════════════════════════════════════
-        // ROUTE SAFETY & ACTIVE RISK ZONE SCANNER
-        // ══════════════════════════════════════════════════════════
-        let routePoints = [];
-        // Listen for clicks on the map to draw the route
-        map.on('click', function(e) {
-            // If there are already 2 points, clear the map for a new route
-            if (routePoints.length >= 2) {
-                routePoints = []; 
-                routeLayer.clearLayers();
-                document.getElementById('route-status').innerHTML = '';
+        // MASTER FUNCTION TO FIX DUPLICATES & STACKING
+        function processIncidentData(inc) {
+            // FIX 1: Prevent duplicates from stacking and crashing the cluster
+            let isDuplicate = activeIncidents.some(existing => existing.lat === inc.lat && existing.lng === inc.lng && existing.category === inc.category);
+            if (isDuplicate) return; 
+
+            // Track safe arrays
+            activeIncidents.push(inc);
+            
+            // CLEANUP ENGINE: If we have more than 150 incidents total, wipe the oldest marker off the map!
+            if(activeIncidents.length > 150) {
+                let oldInc = activeIncidents.shift();
+                if (oldInc.mapMarker) {
+                    if (oldInc.category === 'TRANSIT') {
+                        masterCluster.removeLayer(oldInc.mapMarker);
+                    } else {
+                        map.removeLayer(oldInc.mapMarker);
+                    }
+                }
             }
+
+            // Stats Update
+            document.getElementById('stat-active').innerText = activeIncidents.length;
+            document.getElementById('stat-transit-cnt').innerText = activeIncidents.filter(i => i.category === 'TRANSIT').length;
             
-            // Save the clicked coordinate
-            routePoints.push([e.latlng.lat, e.latlng.lng]);
+            let rawSev = String(inc.severity || "low").toLowerCase();
+            let isHigh = rawSev.includes("high") || rawSev.includes("5") || rawSev.includes("4");
+            let isMed = rawSev.includes("medium") || rawSev.includes("3") || rawSev.includes("warning");
             
-            // Draw a tactical marker (Green for Start, Red for Destination)
-            L.circleMarker([e.latlng.lat, e.latlng.lng], {
-                radius: 6, 
-                color: routePoints.length === 1 ? '#00c851' : '#ff4444', 
-                fillColor: routePoints.length === 1 ? '#00c851' : '#ff4444', 
-                fillOpacity: 0.8
-            }).addTo(routeLayer);
-            // If we have both points, trigger the scan!
-            if (routePoints.length === 2) {
-                scanRoute();
-            }
-        });
-        function scanRoute() {
-            // 1. Draw the proposed travel path
-            const routeLine = L.polyline(routePoints, {
-                color: '#ffaa00', 
-                weight: 3, 
-                dashArray: '5, 8'
-            }).addTo(routeLayer);
+            document.getElementById('stat-crit').innerText = activeIncidents.filter(item => String(item.severity).toLowerCase().includes("high") || String(item.severity).includes("5")).length;
+
+            // Marker Styling
+            let isTransit = (inc.category === 'TRANSIT');
+            let mSize = isTransit ? 12 : (isHigh ? 12 : (isMed ? 10 : 8));
+            let markerColor = isTransit ? '#00d2ff' : (isHigh ? '#ff2d78' : (isMed ? '#ffa502' : '#2ed573'));
+            let sevClass = isHigh ? "severity-high" : (isMed ? "severity-medium" : "severity-low");
             
-            // 2. Create a "Blast Radius" bounding box around the path
-            const scanZone = routeLine.getBounds().pad(0.015); // Adds a geographic buffer around the line
+            let customHtml = isTransit 
+                ? '<div style="width: 100%; height: 100%; background: rgba(0, 210, 255, 0.2); border: 1.5px solid #00d2ff; border-radius: 50%; box-shadow: 0 0 5px #00d2ff;"></div>'
+                : `<div style="width: 100%; height: 100%; background: ${markerColor}; opacity: 0.9; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px ${markerColor};"></div>`;
+
+            const marker = L.marker([inc.lat, inc.lng], { 
+                icon: L.divIcon({ className: `osint-marker ${sevClass}`, html: customHtml, iconSize: [mSize, mSize], iconAnchor: [mSize/2, mSize/2] }) 
+            });
             
-            // 3. Filter your live feed to see if any dots fall inside the scan zone
-            const threats = activeIncidents.filter(inc => scanZone.contains([inc.lat, inc.lng]));
+            marker.bindPopup(`<div style="font-family: monospace;"><strong style="color: #ff4444;">[ ${inc.category} ]</strong><br><br>${inc.description}</div>`);
             
-            // 4. Report the findings to the UI
-            const statusDiv = document.getElementById('route-status');
+            // Attach marker reference so we can delete it later
+            inc.mapMarker = marker;
+
+            if (isTransit) { marker.addTo(masterCluster); } else { marker.addTo(map); }
+
+            // FIX 2: SPLIT THE LOGS INTO THE RIGHT PANELS
+            const timeString = new Date().toLocaleTimeString([], { hour12: false });
+            const shortDesc = (inc.description || "").split('<br><br>')[0].replace('<b>', '').replace('</b>', '');
             
-            if (threats.length === 0) {
-                statusDiv.innerHTML = '<div style="color: #00c851; padding: 10px; border: 1px solid #00c851; background: rgba(0,200,81,0.1); border-radius: 3px;">✓ PATH CLEAR.<br>No Active Risk Zones detected on this vector.</div>';
+            const logEntry = document.createElement('div');
+            let logLevel = isTransit ? 'transit' : (isHigh ? 'high' : (isMed ? 'medium' : 'low'));
+            logEntry.className = `log-entry ${logLevel}`;
+            logEntry.innerHTML = `<div class="log-time">[${timeString}] SYSTEM DROP</div><strong style="color: #fff;">[ ${inc.category} ]</strong><br>${shortDesc}`;
+            
+            logEntry.onclick = () => {
+                map.flyTo([inc.lat, inc.lng], 15, { animate: true, duration: 1.5 });
+                marker.openPopup();
+            };
+
+            // Route to correct box
+            if (isTransit) {
+                const transitLog = document.getElementById("transit-log-content");
+                transitLog.prepend(logEntry);
+                if (transitLog.children.length > 30) transitLog.removeChild(transitLog.lastChild);
             } else {
-                statusDiv.innerHTML = `<div style="color: #ff4444; padding: 10px; border: 1px solid #ff4444; background: rgba(255,68,68,0.1); border-radius: 3px;">⚠️ WARNING: <b>${threats.length} Active Risk Zones</b> detected near this path. Proceed with extreme caution.</div>`;
+                const newsLog = document.getElementById("news-log-content");
+                newsLog.prepend(logEntry);
+                if (newsLog.children.length > 30) newsLog.removeChild(newsLog.lastChild);
             }
+
+            // Trigger Count Updates
+            updateCategoryCounters();
         }
 
-        // ══════════════════════════════════════════════════════════
-        // LEFT PANEL CONTROL WIRING
-        // ══════════════════════════════════════════════════════════
-        
-        let allLoadedMarkers = [];
-        let activeCategoryFilters = { A: true, B: true, C: true, D: true, E: true };
-        let minSeverityFilter = 1;
+        // FIX 3: RE-MAPPED AI CATEGORY COUNTER
+        function updateCategoryCounters() {
+            let countA = 0; // Intel & News
+            let countB = 0; // Hazard & Damage
+            let countC = 0; // Crime
+            let countD = 0; // Transit
+            let countE = 0; // High Security
 
-        // Connect WebSocket data directly into left panel DOM elements
-        const originalOnMessage = ws.onmessage;
-        ws.onmessage = function(event) {
-            const incomingData = JSON.parse(event.data);
-            
-            // 1. If it's transit alert payload data, update our Operations Badges
-            if (incomingData.source_type === 'transit_api_payload' && incomingData.alerts) {
-                renderDynamicLineAlerts(incomingData.alerts);
-            }
-            
-            // 2. Call original message handler
-            originalOnMessage.call(ws, event);
-            
-            // 3. Dynamically recount layout totals for Categories counters
-            updateLiveCategoryBadges();
-        };
-
-        function renderDynamicLineAlerts(alerts) {
-            const container = document.getElementById('live-strike-calendar');
-            if (!container || !alerts) return;
-            // Map out real lines (e.g. M1, RER A) into badge components
-            container.innerHTML = alerts.slice(0, 4).map(alert => {
-                // Automatically isolate the code identifiers (e.g., "1", "A", "13")
-                const lineBadge = alert.line_code ? `<span class="lbadge">${alert.line_mode === 'metro' ? 'M' : ''}${alert.line_code}</span>` : '';
-                
-                return `
-                    <div class="strike-item">
-                        <div class="stk-title">${alert.title || 'Transit Disruption'}</div>
-                        <div class="stk-meta">Severity ${alert.severity} · Status: Active</div>
-                        <div class="stk-lines">${lineBadge}</div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function updateLiveCategoryBadges() {
-            ['A', 'B', 'C', 'D', 'E'].forEach(cat => {
-                const count = activeIncidents.filter(m => {
-                    let catCode = 'A';
-                    if (m.category === 'PROTEST' || m.category === 'CIVIL_UNREST') catCode = 'A';
-                    if (m.category === 'DAMAGE' || m.category === 'PROPERTY_DAMAGE') catCode = 'B';
-                    if (m.category === 'CRIME') catCode = 'C';
-                    if (m.category === 'TRANSIT') catCode = 'D';
-                    if (m.category === 'SECURITY' || m.category === 'HIGH_SECURITY') catCode = 'E';
-                    return catCode === cat;
-                }).length;
-                const element = document.getElementById('c' + cat);
-                if (element) element.textContent = count;
+            activeIncidents.forEach(m => {
+                const c = String(m.category || "").toUpperCase();
+                if (c.includes('PROTEST') || c.includes('NEWS') || c.includes('UNREST') || c.includes('INTEL')) countA++;
+                else if (c.includes('DAMAGE') || c.includes('HAZARD')) countB++;
+                else if (c.includes('CRIME')) countC++;
+                else if (c.includes('TRANSIT')) countD++;
+                else if (c.includes('SECURITY') || c.includes('TERROR')) countE++;
+                else countA++; // Default fallback
             });
-        }
-
-        function toggleCat(cat) {
-            activeCategoryFilters[cat] = !activeCategoryFilters[cat];
-            const toggle = document.querySelector(`[data-cat="${cat}"]`);
-            if (toggle) {
-                toggle.classList.toggle('active');
-            }
-            applyFilters();
-        }
-
-        function onSev(val) {
-            minSeverityFilter = parseInt(val);
-            document.getElementById('sev-v').textContent = val;
-            applyFilters();
-        }
-
-        function applyFilters() {
-            const verifiedOnly = document.getElementById('tog-vfd').checked;
-            // Apply filters to all markers on map
-            masterCluster.eachLayer(layer => {
-                let show = true;
-                // Add filter logic here
-                layer.setOpacity(show ? 1 : 0.2);
-            });
-        }
-
-        function toggleClusterMode(enabled) {
-            if (enabled) {
-                map.addLayer(masterCluster);
-            } else {
-                map.removeLayer(masterCluster);
-            }
-        }
-
-        function checkRoute() {
-            if (!coordFrom || !coordTo) {
-                document.getElementById('rte-result').innerHTML = '<span style="color: #ff4444;">Please click the map to set both origin and destination</span>';
-                return;
-            }
             
-            // Trigger the actual OSRM routing engine!
-            calculateRoute();
+            document.getElementById('cA').textContent = countA;
+            document.getElementById('cB').textContent = countB;
+            document.getElementById('cC').textContent = countC;
+            document.getElementById('cD').textContent = countD;
+            document.getElementById('cE').textContent = countE;
         }
 
-        async function parseAI() {
-            const textContent = document.getElementById('ai-inp').value.trim();
-            if (!textContent) return;
-            
-            const loader = document.getElementById('pi');
-            const resultBox = document.getElementById('ai-res');
-            const addButton = document.getElementById('ai-add');
-            
-            loader.style.display = 'flex';
-            resultBox.style.display = 'none';
-            addButton.style.display = 'none';
-            
-            try {
-                // FORCE HTTPS to your exact live Render server domain!
-                const response = await fetch(`${BACKEND_URL}/api/parse-incident`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: textContent })
-                });
-                
-                const parsedData = await response.json();
-                
-                // Expose structured properties inside your UI metrics
-                resultBox.innerHTML = `
-                    <div><span class="fk">CATEGORY: </span><span class="fv">${parsedData.category}</span></div>
-                    <div><span class="fk">TYPE: </span><span class="fv">${parsedData.incident_type}</span></div>
-                    <div><span class="fk">SEVERITY: </span><span class="fv">${parsedData.severity}/5</span></div>
-                    <div><span class="fk">COORDS: </span><span class="fv">${parsedData.lat}, ${parsedData.lng}</span></div>
-                `;
-                
-                resultBox.style.display = 'block';
-                addButton.style.display = 'block';
-                
-                // Keep a temporary reference to store onto map if validated
-                window.latestParsedIncident = parsedData;
-                
-            } catch (error) {
-                console.error("AI Parser Routing Error:", error);
-                resultBox.innerHTML = `<span style="color:var(--cat-a)">Parsing Timeout / Failure</span>`;
-                resultBox.style.display = 'block';
-            } finally {
-                loader.style.display = 'none';
-            }
-        }
-
-        function addParsed() {
-            if (window.latestParsedIncident) {
-                const inc = window.latestParsedIncident;
-                
-                // 1. Bulletproof the coordinates (Default to Paris center if AI fails)
-                const safeLat = parseFloat(inc.lat) || 48.8566;
-                const safeLng = parseFloat(inc.lng) || 2.3522;
-                
-                // 2. Package it EXACTLY like a real background news alert
-                const manualAlert = {
-                    lat: safeLat,
-                    lng: safeLng,
-                    category: inc.category || "SECURITY",
-                    severity: inc.severity || "medium",
-                    description: `<b>🚨 FIELD INTEL: ${inc.incident_type || "Manual Override"}</b><br><br>Operator injected intelligence report.<br><br>Source: Manual Parsed Entry`
-                };
-                // 3. Force-feed it directly into your WebSocket rendering engine!
-                // This guarantees it goes through your custom styling rules (Yellow/Red/Green)
-                ws.onmessage({ data: JSON.stringify({ event: "new_incident", incident: manualAlert }) });
-                // 4. Fly the camera to the new dot
-                map.flyTo([safeLat, safeLng], 14, { animate: true, duration: 1.5 });
-                
-                // 5. Clean up the UI
-                document.getElementById('ai-inp').value = '';
-                document.getElementById('ai-res').style.display = 'none';
-                document.getElementById('ai-add').style.display = 'none';
-            }
-        }
-        function exportDailyBrief() {
-            if (activeIncidents.length === 0) {
-                alert("⚠️ No active intelligence on the map to export.");
-                return;
-            }
-            // 1. Create the CSV Headers
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Category,Severity,Type,Source,Time (CET),Latitude,Longitude,Description\n";
-            // 2. Loop through every dot on the map and format it
-            activeIncidents.forEach(function(inc) {
-                // Clean the description to prevent commas from breaking the spreadsheet columns
-                let cleanDesc = inc.description.replace(/,/g, ";").replace(/\n/g, " ").replace(/<[^>]*>?/gm, ''); 
-                
-                // Convert the time to a readable format
-                let timeString = new Date().toLocaleTimeString('fr-FR', {timeZone: 'Europe/Paris', hour12: false});
-                
-                // Build the row
-                let row = `${inc.category},${inc.severity},${inc.type},${inc.source_type},${timeString},${inc.lat},${inc.lng},"${cleanDesc}"`;
-                csvContent += row + "\n";
-            });
-            // 3. Trigger the secure local download
-            let encodedUri = encodeURI(csvContent);
-            let link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            
-            // Name the file dynamically based on today's date
-            let dateStr = new Date().toISOString().slice(0, 10);
-            link.setAttribute("download", `GreyLane_Intelligence_Brief_${dateStr}.csv`);
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
     </script>
 
-    <!-- BOTTOM SYSTEM COMPLIANCE & AUTHORITATIVE DATA LAYER -->
     <div id="bottom-authority-bar">
         <div class="footer-logo-group">
-            <!-- Your Custom Elite Round Seal -->
-            <img class="footer-gl-main" src="new logo grey lane.png" alt="Grey Lane Security Grid">
-            
-            <!-- Regional Media & Public Infrastructure Vector Nodes (Fixed via Google CDN) -->
             <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=france24.com&sz=128" alt="FRANCE 24">
             <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=leparisien.fr&sz=128" alt="LE PARISIEN">
-            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=data.gouv.fr&sz=128" alt="DATA.GOUV.FR">
-            <img class="footer-logo-img" src="https://www.google.com/s2/favicons?domain=iledefrance-mobilites.fr&sz=128" alt="IDFM">
         </div>
-        
         <div class="footer-legal-text">
-            INTEGRATED SYSTEM DEPLOYMENT OPERATING IN CONFORMANCE WITH REGIONAL OPEN DATA INITIATIVES AND MUNICIPAL REPORTING MANDATES. SYSTEMATIZED INTELLIGENCE INPUTS AND GEOSPATIAL MATRIX REAL-TIME INGESTIONS ARE PROPRIETARY ANALYTICAL COMPILATIONS REPLICATED VIA REGISTERED PUBLIC CONTEXT ENDPOINTS [IDFM, DATA.GOUV.FR, LE PARISIEN, FRANCE 24]. THIS PLATFORM IMPLEMENTATION OPERATES FULLY INDEPENDENTLY AS A NON-ENDORSED VISUALIZATION INSTRUMENT IN ACCORDANCE WITH RELEVANT PUBLIC SECTOR RE-USE PROTOCOLS.
+            SYSTEM DEPLOYMENT ACTIVE. MUNICIPAL REPORTING MANDATES. INTELLIGENCE REAL-TIME INGESTION.
         </div>
     </div>
 </body>
 </html>
-.
